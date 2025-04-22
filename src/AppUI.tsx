@@ -11,6 +11,9 @@ import { useNotebooks } from './hooks/useNotebooks';
 import { useSections } from './hooks/useSections';
 import { useItems } from './hooks/useItems';
 import { useNotes } from './hooks/useNotes';
+import { supabase } from './lib/supabase';
+import { Section, Note } from './types';
+import { SearchResult } from './components/SearchResults';
 
 interface AppUIProps {
   session: Session;
@@ -84,6 +87,84 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     addTagToNote,
     removeTagFromNote,
   } = useNotes(selectedItem);
+
+  // Add a new state for sections with notes
+  const [sectionsWithNotes, setSectionsWithNotes] = useState<Section[]>([]);
+  
+  // Load notes for all items in sections
+  useEffect(() => {
+    if (!sections || sections.length === 0) {
+      setSectionsWithNotes([]);
+      return;
+    }
+    
+    console.log("Processing sections for search:", sections);
+
+    // Helper function to load notes for an item
+    const loadNotesForItem = async (itemId: string) => {
+      const { data, error } = await supabase
+        .from('notes')
+        .select(`
+          id, 
+          title, 
+          content, 
+          created_at, 
+          updated_at,
+          tags!note_tags(
+            id,
+            name
+          )
+        `)
+        .eq('item_id', itemId);
+        
+      if (error) {
+        console.error('Error loading notes for item:', error);
+        return [];
+      }
+      
+      return data?.map(note => ({
+        id: note.id,
+        title: note.title,
+        content: note.content,
+        tags: note.tags?.map(tag => ({
+          id: tag.id,
+          name: tag.name
+        })) || [],
+        lastModified: new Date(note.updated_at)
+      })) as Note[];
+    };
+    
+    // Clone and process sections
+    const processSections = async () => {
+      const processedSections = [...sections];
+      
+      // Process all sections
+      for (const section of processedSections) {
+        // Process items in section
+        if (section.items) {
+          for (const item of section.items) {
+            item.notes = await loadNotesForItem(item.id);
+          }
+        }
+        
+        // Process items in subsections
+        if (section.subsections) {
+          for (const subsection of section.subsections) {
+            if (subsection.items) {
+              for (const item of subsection.items) {
+                item.notes = await loadNotesForItem(item.id);
+              }
+            }
+          }
+        }
+      }
+      
+      console.log("Processed sections with notes:", processedSections);
+      setSectionsWithNotes(processedSections);
+    };
+    
+    processSections();
+  }, [sections]);
 
   useEffect(() => {
     if (urlNotebookId) {
@@ -173,22 +254,44 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
   };
 
   // Handle search result selection
-  const handleSearchResultSelect = (result: { 
-    sectionId: string, 
-    item: any, 
-    note: any, 
-    subsectionId?: string 
-  }) => {
-    if (!result.sectionId || !result.item || !result.note) return;
+  const handleSearchResultSelect = (result: SearchResult) => {
+    if (!result.sectionId) return;
     
-    // Navigate to the correct section
+    // Always navigate to the selected section
     setSelectedSection(result.sectionId);
     
-    // Select the item
-    setSelectedItem(result.item.id);
+    // If it's a section result, only navigate to the section
+    if (result.type === 'section') {
+      setSelectedItem(undefined);
+      setSelectedNote(undefined);
+      return;
+    }
     
-    // Select the note
-    setSelectedNote(result.note.id);
+    // If it's a subsection result, only navigate to the section
+    if (result.type === 'subsection') {
+      // TODO: If you implement subsection navigation in the future
+      setSelectedItem(undefined);
+      setSelectedNote(undefined);
+      return;
+    }
+    
+    // If it's an item or note result, navigate to the item
+    if (result.item && result.item.id) {
+      setSelectedItem(result.item.id);
+      
+      // If it's specifically a note result, also set the selected note
+      if (result.type === 'note' && result.note && result.note.id) {
+        setSelectedNote(result.note.id);
+      } else {
+        // For items, select the first note if available
+        const item = items.find(i => i.id === result.item?.id);
+        if (item?.notes && item.notes.length > 0) {
+          setSelectedNote(item.notes[0].id);
+        } else {
+          setSelectedNote(undefined);
+        }
+      }
+    }
   };
 
   return (
@@ -209,7 +312,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
         notebooks={notebooks}
         onSelectNotebook={handleNotebookSelect}
         onCreateNotebook={handleCreateNotebook}
-        sections={sections}
+        sections={sectionsWithNotes}
         onSearchResultSelect={handleSearchResultSelect}
       />
       
@@ -246,7 +349,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
             onSelectItem={(itemId) => {
               setSelectedItem(itemId);
               const item = items.find(i => i.id === itemId);
-              if (item?.notes?.length > 0) {
+              if (item?.notes && item.notes.length > 0) {
                 setSelectedNote(item.notes[0].id);
               }
             }}

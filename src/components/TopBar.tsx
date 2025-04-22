@@ -6,7 +6,7 @@ import { ImportDialog } from './ImportDialog';
 import { exportData } from '../utils/exportData';
 import { NotebookSelector } from './NotebookSelector';
 import { useReadingQueue } from '../hooks/useReadingQueue';
-import { SearchResults } from './SearchResults';
+import { SearchResults, SearchResult } from './SearchResults';
 import { Section, Item, Note, Notebook } from '../types';
 
 interface TopBarProps {
@@ -23,7 +23,7 @@ interface TopBarProps {
   currentNotebook?: { id: string; title: string };
   onOpenSidebar: () => void;
   sections?: Section[];
-  onSearchResultSelect?: (result: { sectionId: string, item: Item, note: Note, subsectionId?: string }) => void;
+  onSearchResultSelect?: (result: SearchResult) => void;
 }
 
 export function TopBar({
@@ -56,65 +56,236 @@ export function TopBar({
       return [];
     }
 
+    console.log("Searching for:", searchQuery);
+    console.log("Sections to search:", sections);
+
     const query = searchQuery.toLowerCase();
-    const results: Array<{
-      sectionId: string;
-      sectionTitle: string;
-      subsectionId?: string;
-      subsectionTitle?: string;
-      item: Item;
-      note: Note;
-    }> = [];
+    const results: SearchResult[] = [];
 
     sections.forEach((section) => {
+      // Search in section titles
+      if (section.title && section.title.toLowerCase().includes(query)) {
+        results.push({
+          sectionId: section.id,
+          sectionTitle: section.title,
+          type: 'section'
+        });
+      }
+      
       // Search in section items
-      section.items?.forEach((item) => {
-        item.notes?.forEach((note) => {
-          if (
-            item.title.toLowerCase().includes(query) ||
-            note.title?.toLowerCase().includes(query) ||
-            (note.content && note.content.toLowerCase().includes(query))
-          ) {
+      if (section.items) {
+        section.items.forEach((item) => {
+          // Search in item titles
+          if (item.title && item.title.toLowerCase().includes(query)) {
             results.push({
               sectionId: section.id,
               sectionTitle: section.title || '',
               item,
-              note,
+              type: 'item'
+            });
+          }
+          
+          // Check if item has notes property and it's an array
+          if (item.notes && Array.isArray(item.notes)) {
+            item.notes.forEach((note) => {
+              if (
+                (note.title && note.title.toLowerCase().includes(query)) ||
+                (note.content && note.content.toLowerCase().includes(query))
+              ) {
+                results.push({
+                  sectionId: section.id,
+                  sectionTitle: section.title || '',
+                  item,
+                  note,
+                  type: 'note'
+                });
+              }
             });
           }
         });
-      });
+      }
+      
+      // Search in section groups if they exist
+      if (section.groups && Array.isArray(section.groups)) {
+        section.groups.forEach((group) => {
+          // Search in group titles
+          if (group.title && group.title.toLowerCase().includes(query)) {
+            results.push({
+              sectionId: section.id,
+              sectionTitle: section.title || '',
+              type: 'item',
+              item: { id: group.id, title: group.title, notes: [] }
+            });
+          }
+          
+          if (group.items && Array.isArray(group.items)) {
+            group.items.forEach((item) => {
+              // Search in item titles
+              if (item.title && item.title.toLowerCase().includes(query)) {
+                results.push({
+                  sectionId: section.id,
+                  sectionTitle: section.title || '',
+                  item,
+                  type: 'item'
+                });
+              }
+              
+              if (item.notes && Array.isArray(item.notes)) {
+                item.notes.forEach((note) => {
+                  if (
+                    (note.title && note.title.toLowerCase().includes(query)) ||
+                    (note.content && note.content.toLowerCase().includes(query))
+                  ) {
+                    results.push({
+                      sectionId: section.id,
+                      sectionTitle: section.title || '',
+                      item,
+                      note,
+                      type: 'note'
+                    });
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
 
       // Search in subsections if they exist
-      section.subsections?.forEach((subsection) => {
-        subsection.items?.forEach((item) => {
-          item.notes?.forEach((note) => {
-            if (
-              item.title.toLowerCase().includes(query) ||
-              note.title?.toLowerCase().includes(query) ||
-              (note.content && note.content.toLowerCase().includes(query))
-            ) {
-              results.push({
-                sectionId: section.id,
-                sectionTitle: section.title || '',
-                subsectionId: subsection.id,
-                subsectionTitle: subsection.title || '',
-                item,
-                note,
-              });
-            }
-          });
+      if (section.subsections && Array.isArray(section.subsections)) {
+        section.subsections.forEach((subsection) => {
+          // Search in subsection titles
+          if (subsection.title && subsection.title.toLowerCase().includes(query)) {
+            results.push({
+              sectionId: section.id,
+              sectionTitle: section.title || '',
+              subsectionId: subsection.id,
+              subsectionTitle: subsection.title || '',
+              type: 'subsection'
+            });
+          }
+          
+          if (subsection.items && Array.isArray(subsection.items)) {
+            subsection.items.forEach((item) => {
+              // Search in item titles
+              if (item.title && item.title.toLowerCase().includes(query)) {
+                results.push({
+                  sectionId: section.id,
+                  sectionTitle: section.title || '',
+                  subsectionId: subsection.id,
+                  subsectionTitle: subsection.title || '',
+                  item,
+                  type: 'item'
+                });
+              }
+              
+              if (item.notes && Array.isArray(item.notes)) {
+                item.notes.forEach((note) => {
+                  if (
+                    (note.title && note.title.toLowerCase().includes(query)) ||
+                    (note.content && note.content.toLowerCase().includes(query))
+                  ) {
+                    results.push({
+                      sectionId: section.id,
+                      sectionTitle: section.title || '',
+                      subsectionId: subsection.id,
+                      subsectionTitle: subsection.title || '',
+                      item,
+                      note,
+                      type: 'note'
+                    });
+                  }
+                });
+              }
+            });
+          }
+          
+          // Search in subsection groups
+          if (subsection.groups && Array.isArray(subsection.groups)) {
+            subsection.groups.forEach((group) => {
+              // Search in group titles
+              if (group.title && group.title.toLowerCase().includes(query)) {
+                results.push({
+                  sectionId: section.id,
+                  sectionTitle: section.title || '',
+                  subsectionId: subsection.id,
+                  subsectionTitle: subsection.title || '',
+                  type: 'item',
+                  item: { id: group.id, title: group.title, notes: [] }
+                });
+              }
+              
+              if (group.items && Array.isArray(group.items)) {
+                group.items.forEach((item) => {
+                  // Search in item titles
+                  if (item.title && item.title.toLowerCase().includes(query)) {
+                    results.push({
+                      sectionId: section.id,
+                      sectionTitle: section.title || '',
+                      subsectionId: subsection.id,
+                      subsectionTitle: subsection.title || '',
+                      item,
+                      type: 'item'
+                    });
+                  }
+                  
+                  if (item.notes && Array.isArray(item.notes)) {
+                    item.notes.forEach((note) => {
+                      if (
+                        (note.title && note.title.toLowerCase().includes(query)) ||
+                        (note.content && note.content.toLowerCase().includes(query))
+                      ) {
+                        results.push({
+                          sectionId: section.id,
+                          sectionTitle: section.title || '',
+                          subsectionId: subsection.id,
+                          subsectionTitle: subsection.title || '',
+                          item,
+                          note,
+                          type: 'note'
+                        });
+                      }
+                    });
+                  }
+                });
+              }
+            });
+          }
         });
-      });
+      }
     });
 
-    return results;
+    // Remove duplicates - prioritize notes over items over sections
+    const uniqueResults = results.reduce((acc, result) => {
+      const key = result.type === 'note' 
+        ? `note-${result.note?.id}` 
+        : result.type === 'item' 
+          ? `item-${result.item?.id}` 
+          : result.type === 'subsection'
+            ? `subsection-${result.subsectionId}`
+            : `section-${result.sectionId}`;
+      
+      if (!acc[key] || (
+        acc[key].type === 'section' || 
+        (acc[key].type === 'subsection' && result.type !== 'section') ||
+        (acc[key].type === 'item' && result.type === 'note')
+      )) {
+        acc[key] = result;
+      }
+      
+      return acc;
+    }, {} as Record<string, typeof results[0]>);
+
+    console.log("Search results:", Object.values(uniqueResults));
+    return Object.values(uniqueResults);
   }, [sections, searchQuery]);
 
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-    setShowSearchResults(e.target.value.trim().length > 0);
+    const value = e.target.value;
+    console.log("Search input changed:", value);
+    setSearchQuery(value);
+    setShowSearchResults(value.trim().length > 0);
   };
 
   // Handle search result selection
