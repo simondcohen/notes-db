@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
+import { debounce } from 'lodash-es';
 import { TopBar } from './components/TopBar';
 import { NotebookSidebar } from './components/NotebookSidebar';
 import { SectionsColumn } from './components/SectionsColumn';
@@ -86,6 +87,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     deleteNote,
     addTagToNote,
     removeTagFromNote,
+    refresh: refreshNotes,
   } = useNotes(selectedItem);
 
   // Add a new state for sections with notes
@@ -245,12 +247,28 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     }
   };
 
+  const debouncedSave = React.useMemo(
+    () => debounce(async (id: string, html: string) => {
+      try {
+        if (id && html !== undefined) {
+          await updateNote(id, { content: html });
+          await refreshNotes();
+        }
+      } catch (error) {
+        console.error('Error saving note:', error);
+      }
+    }, 600),           // waits 600 ms after the last keypress
+    [updateNote, refreshNotes]
+  );
+
   const handleUpdateContent = async (noteId: string, content: string) => {
-    await updateNote(noteId, { content });
+    debouncedSave(noteId, content);
+    return Promise.resolve();
   };
 
   const handleUpdateNoteTitle = async (noteId: string, title: string) => {
     await updateNote(noteId, { title });
+    await refreshNotes();
   };
 
   // Handle search result selection

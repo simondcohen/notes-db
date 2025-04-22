@@ -38,7 +38,8 @@ export function useNotes(itemId?: string) {
         tags: note.tags?.map(tag => ({
           id: tag.id,
           name: tag.name
-        })) || []
+        })) || [],
+        lastModified: new Date(note.updated_at)
       })) || [];
 
       setNotes(notesWithTags);
@@ -81,7 +82,6 @@ export function useNotes(itemId?: string) {
         .eq('id', noteId);
 
       if (error) throw error;
-      await refresh();
       return true;
     } catch (error) {
       handleError(error as Error);
