@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.ProseMirror {
+  @apply p-4;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply text-gray-400 float-left h-0 pointer-events-none;
+}
+
+.ProseMirror:focus {
+  @apply outline-none;
+}
+
+.ProseMirror > * + * {
+  @apply mt-4;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  @apply pl-4;
+}
+
+.ProseMirror h1 {
+  @apply text-2xl font-bold;
+}
+
+.ProseMirror h2 {
+  @apply text-xl font-bold;
+}
+
+.ProseMirror code {
+  @apply bg-gray-100 rounded px-1.5 py-0.5 text-sm;
+}
+
+.ProseMirror blockquote {
+  @apply border-l-4 border-gray-200 pl-4 italic;
+}
+
+.ProseMirror mark {
+  @apply bg-yellow-200 px-0.5 rounded;
+}
