@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { debounce } from 'lodash-es';
+import { parseISO } from 'date-fns';
 import { TopBar } from './components/TopBar';
 import { NotebookSidebar } from './components/NotebookSidebar';
 import { SectionsColumn } from './components/SectionsColumn';
@@ -200,9 +201,6 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     selectedNote,
   ]);
 
-  if (notebooksLoading) return <LoadingSpinner />;
-  if (notebooksError) return <div className="text-red-500">Error: {notebooksError}</div>;
-
   const activeNotebook = notebooks?.find(
     notebook => notebook?.id === selectedNotebook
   ) || null;
@@ -252,7 +250,6 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
       try {
         if (id && html !== undefined) {
           await updateNote(id, { content: html });
-          await refreshNotes();
         }
       } catch (error) {
         console.error('Error saving note:', error);
@@ -311,6 +308,25 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
       }
     }
   };
+
+  // Automatically open the most recently edited note when a new item is selected
+  React.useEffect(() => {
+    if (!selectedItem || notes.length === 0) return;
+
+    // Assumes each note has an `updated_at` (or falls back to `created_at`)
+    const lastEdited = [...notes].sort((a, b) => {
+      const aTime = parseISO((a as any).updated_at ?? (a as any).created_at).getTime();
+      const bTime = parseISO((b as any).updated_at ?? (b as any).created_at).getTime();
+      return bTime - aTime;   // newest first
+    })[0];
+
+    if (lastEdited && lastEdited.id !== selectedNote) {
+      setSelectedNote(lastEdited.id);
+    }
+  }, [selectedItem, notes]);
+
+  if (notebooksLoading) return <LoadingSpinner />;
+  if (notebooksError) return <div className="text-red-500">Error: {notebooksError}</div>;
 
   return (
     <div className="h-screen flex flex-col">

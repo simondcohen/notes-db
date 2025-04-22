@@ -82,6 +82,13 @@ export function useNotes(itemId?: string) {
         .eq('id', noteId);
 
       if (error) throw error;
+      
+      setNotes(prev =>
+        prev.map(n =>
+          n.id === noteId ? { ...n, ...updates } as Note : n
+        )
+      );
+      
       return true;
     } catch (error) {
       handleError(error as Error);
