@@ -57,7 +57,6 @@ export function useTags(userId: string) {
     if (!userId) return null;
 
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('tags')
         .insert({
@@ -73,8 +72,6 @@ export function useTags(userId: string) {
     } catch (error) {
       handleError(error as Error);
       return null;
-    } finally {
-      setLoading(false);
     }
   };
 

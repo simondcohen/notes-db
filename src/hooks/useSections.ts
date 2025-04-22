@@ -43,7 +43,6 @@ export function useSections(notebookId?: string) {
     if (!notebookId) return null;
 
     try {
-      setLoading(true);
       const { data: existingSections } = await supabase
         .from('sections')
         .select('position')
@@ -68,14 +67,11 @@ export function useSections(notebookId?: string) {
     } catch (error) {
       handleError(error as Error);
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 
   const updateSection = async (sectionId: string, title: string) => {
     try {
-      setLoading(true);
       const { error } = await supabase
         .from('sections')
         .update({ title })
@@ -87,14 +83,11 @@ export function useSections(notebookId?: string) {
     } catch (error) {
       handleError(error as Error);
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 
   const deleteSection = async (sectionId: string) => {
     try {
-      setLoading(true);
       const { error } = await supabase
         .from('sections')
         .delete()
@@ -106,14 +99,11 @@ export function useSections(notebookId?: string) {
     } catch (error) {
       handleError(error as Error);
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 
   const reorderSections = async (reorderedSections: Section[]) => {
     try {
-      setLoading(true);
       await Promise.all(
         reorderedSections.map((section, index) =>
           supabase
@@ -127,8 +117,6 @@ export function useSections(notebookId?: string) {
     } catch (error) {
       handleError(error as Error);
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 

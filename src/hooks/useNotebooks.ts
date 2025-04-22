@@ -34,7 +34,6 @@ export function useNotebooks(userId: string) {
 
   const addNotebook = async (title: string) => {
     try {
-      setLoading(true);
       const { error } = await supabase
         .from('notebooks')
         .insert({
@@ -48,14 +47,11 @@ export function useNotebooks(userId: string) {
     } catch (error) {
       handleError(error as Error);
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 
   const updateNotebook = async (notebookId: string, title: string) => {
     try {
-      setLoading(true);
       const { error } = await supabase
         .from('notebooks')
         .update({ 
@@ -70,14 +66,11 @@ export function useNotebooks(userId: string) {
     } catch (error) {
       handleError(error as Error);
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 
   const deleteNotebook = async (notebookId: string) => {
     try {
-      setLoading(true);
       const { error } = await supabase
         .from('notebooks')
         .delete()
@@ -89,8 +82,6 @@ export function useNotebooks(userId: string) {
     } catch (error) {
       handleError(error as Error);
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 

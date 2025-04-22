@@ -54,7 +54,6 @@ export function useNotes(itemId?: string) {
     if (!itemId) return null;
     
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('notes')
         .insert({
@@ -71,14 +70,11 @@ export function useNotes(itemId?: string) {
     } catch (error) {
       handleError(error as Error);
       return null;
-    } finally {
-      setLoading(false);
     }
   };
 
   const updateNote = async (noteId: string, updates: Partial<{ title: string; content: string }>) => {
     try {
-      setLoading(true);
       const { error } = await supabase
         .from('notes')
         .update(updates)
@@ -90,14 +86,11 @@ export function useNotes(itemId?: string) {
     } catch (error) {
       handleError(error as Error);
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 
   const deleteNote = async (noteId: string) => {
     try {
-      setLoading(true);
       const { error } = await supabase
         .from('notes')
         .delete()
@@ -109,8 +102,6 @@ export function useNotes(itemId?: string) {
     } catch (error) {
       handleError(error as Error);
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 
