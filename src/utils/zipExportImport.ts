@@ -219,20 +219,242 @@ export async function importFromZip(userId: string, file: File) {
           updatedCount++;
         }
       } else {
-        // We would need to parse the file path to determine notebook, section, and item
-        // For now, we'll skip adding notes that don't exist
-        console.warn(`Note ${frontmatter.id} does not exist in the database. Skipping.`);
-        // In a real implementation, we would:
-        // 1. Parse the path to get notebook/section/item info
-        // 2. Find or create the corresponding notebook, section, and item
-        // 3. Add the note to that item
-        // This would require more complex path parsing and DB operations
+        // Create new note
+        try {
+          // Parse the file path to get notebook/section/item info
+          const pathParts = filePath.split('/').filter(Boolean);
+          
+          // If path has fewer than 3 levels, create note in "Imported" notebook
+          if (pathParts.length < 3) {
+            await createNoteInImportedNotebook(userId, frontmatter.id, frontmatter.title, body);
+            addedCount++;
+            continue;
+          }
+          
+          // Extract notebook, section, and item titles from path
+          const notebookTitle = pathParts[0].replace(/_/g, ' ');
+          const sectionTitle = pathParts[1].replace(/_/g, ' ');
+          const itemTitle = pathParts[2].replace(/_/g, ' ');
+          
+          // Find or create notebook
+          const { data: notebookData } = await supabase
+            .from('notebooks')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('title', notebookTitle);
+            
+          let notebookId;
+          
+          if (notebookData && notebookData.length > 0) {
+            notebookId = notebookData[0].id;
+          } else {
+            const { data: newNotebook, error: notebookError } = await supabase
+              .from('notebooks')
+              .insert({
+                title: notebookTitle,
+                user_id: userId
+              })
+              .select('id')
+              .single();
+              
+            if (notebookError) throw notebookError;
+            notebookId = newNotebook.id;
+          }
+          
+          // Find or create section
+          const { data: sectionData } = await supabase
+            .from('sections')
+            .select('id, position')
+            .eq('notebook_id', notebookId)
+            .eq('title', sectionTitle);
+            
+          let sectionId;
+          
+          if (sectionData && sectionData.length > 0) {
+            sectionId = sectionData[0].id;
+          } else {
+            // Get the highest position
+            const { data: highestPosSection } = await supabase
+              .from('sections')
+              .select('position')
+              .eq('notebook_id', notebookId)
+              .order('position', { ascending: false })
+              .limit(1);
+              
+            const position = (highestPosSection?.[0]?.position ?? -1) + 1;
+            
+            const { data: newSection, error: sectionError } = await supabase
+              .from('sections')
+              .insert({
+                title: sectionTitle,
+                notebook_id: notebookId,
+                position,
+                user_id: userId
+              })
+              .select('id')
+              .single();
+              
+            if (sectionError) throw sectionError;
+            sectionId = newSection.id;
+          }
+          
+          // Find or create item
+          const { data: itemData } = await supabase
+            .from('items')
+            .select('id')
+            .eq('section_id', sectionId)
+            .eq('title', itemTitle);
+            
+          let itemId;
+          
+          if (itemData && itemData.length > 0) {
+            itemId = itemData[0].id;
+          } else {
+            // Get the highest position
+            const { data: highestPosItem } = await supabase
+              .from('items')
+              .select('position')
+              .eq('section_id', sectionId)
+              .order('position', { ascending: false })
+              .limit(1);
+              
+            const position = (highestPosItem?.[0]?.position ?? -1) + 1;
+            
+            const { data: newItem, error: itemError } = await supabase
+              .from('items')
+              .insert({
+                title: itemTitle,
+                section_id: sectionId,
+                position
+              })
+              .select('id')
+              .single();
+              
+            if (itemError) throw itemError;
+            itemId = newItem.id;
+          }
+          
+          // Create the note
+          const { error: noteError } = await supabase
+            .from('notes')
+            .insert({
+              id: frontmatter.id,
+              item_id: itemId,
+              title: frontmatter.title,
+              content: body
+            });
+            
+          if (noteError) throw noteError;
+          addedCount++;
+        } catch (error) {
+          console.error(`Error creating note from ${filePath}:`, error);
+        }
       }
     }
     
     return { updated: updatedCount, added: addedCount };
   } catch (error) {
     console.error('Error importing from zip:', error);
+    throw error;
+  }
+}
+
+// Helper function to create a note in the "Imported" notebook when path is missing levels
+async function createNoteInImportedNotebook(userId: string, noteId: string, noteTitle: string, noteContent: string) {
+  try {
+    // Find or create "Imported" notebook
+    const { data: notebookData } = await supabase
+      .from('notebooks')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('title', 'Imported');
+      
+    let notebookId;
+    
+    if (notebookData && notebookData.length > 0) {
+      notebookId = notebookData[0].id;
+    } else {
+      const { data: newNotebook, error: notebookError } = await supabase
+        .from('notebooks')
+        .insert({
+          title: 'Imported',
+          user_id: userId
+        })
+        .select('id')
+        .single();
+        
+      if (notebookError) throw notebookError;
+      notebookId = newNotebook.id;
+    }
+    
+    // Find or create default section
+    const { data: sectionData } = await supabase
+      .from('sections')
+      .select('id')
+      .eq('notebook_id', notebookId)
+      .eq('title', 'Imported Notes');
+      
+    let sectionId;
+    
+    if (sectionData && sectionData.length > 0) {
+      sectionId = sectionData[0].id;
+    } else {
+      const { data: newSection, error: sectionError } = await supabase
+        .from('sections')
+        .insert({
+          title: 'Imported Notes',
+          notebook_id: notebookId,
+          position: 0,
+          user_id: userId
+        })
+        .select('id')
+        .single();
+        
+      if (sectionError) throw sectionError;
+      sectionId = newSection.id;
+    }
+    
+    // Find or create default item
+    const { data: itemData } = await supabase
+      .from('items')
+      .select('id')
+      .eq('section_id', sectionId)
+      .eq('title', 'Imported Items');
+      
+    let itemId;
+    
+    if (itemData && itemData.length > 0) {
+      itemId = itemData[0].id;
+    } else {
+      const { data: newItem, error: itemError } = await supabase
+        .from('items')
+        .insert({
+          title: 'Imported Items',
+          section_id: sectionId,
+          position: 0
+        })
+        .select('id')
+        .single();
+        
+      if (itemError) throw itemError;
+      itemId = newItem.id;
+    }
+    
+    // Create the note
+    const { error: noteError } = await supabase
+      .from('notes')
+      .insert({
+        id: noteId,
+        item_id: itemId,
+        title: noteTitle,
+        content: noteContent
+      });
+      
+    if (noteError) throw noteError;
+    
+    return true;
+  } catch (error) {
+    console.error('Error creating note in Imported notebook:', error);
     throw error;
   }
 } 
