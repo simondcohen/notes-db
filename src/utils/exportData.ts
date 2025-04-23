@@ -90,8 +90,8 @@ export async function exportData(userId: string, notebookId?: string) {
     const link = document.createElement('a');
     link.href = url;
     const filename = notebookId 
-      ? `notebook_${notebooks[0]?.title.toLowerCase().replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`
-      : `notes_export_${new Date().toISOString().split('T')[0]}.json`;
+      ? `notebook_${notebooks[0]?.title.toLowerCase().replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}_${new Date().toISOString().split('T')[1].split('.')[0].replace(/:/g, '-')}.json`
+      : `notes_export_${new Date().toISOString().split('T')[0]}_${new Date().toISOString().split('T')[1].split('.')[0].replace(/:/g, '-')}.json`;
     link.download = filename;
     document.body.appendChild(link);
     link.click();

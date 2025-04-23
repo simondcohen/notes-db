@@ -133,7 +133,7 @@ export async function exportAsZip(userId: string, notebookId: string) {
 
     // Generate and download the zip
     const zipBlob = await zip.generateAsync({ type: 'blob' });
-    const filename = `notebook_${notebook.title.toLowerCase().replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.zip`;
+    const filename = `notebook_${notebook.title.toLowerCase().replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.zip`;
     saveAs(zipBlob, filename);
     
     return { success: true };
