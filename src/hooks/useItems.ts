@@ -39,6 +39,11 @@ export function useItems(sectionId?: string) {
     if (!sectionId) return null;
     
     try {
+      // First get the current user
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('User must be authenticated to create items');
+      const userId = session.user.id;
+
       const { data: existingItems } = await supabase
         .from('items')
         .select('position')
@@ -53,7 +58,8 @@ export function useItems(sectionId?: string) {
         .insert({
           title,
           section_id: sectionId,
-          position
+          position,
+          user_id: userId
         })
         .select()
         .single();
@@ -66,7 +72,8 @@ export function useItems(sectionId?: string) {
         .insert({
           item_id: newItem.id,
           title: 'New Note',
-          content: ''
+          content: '',
+          user_id: userId
         })
         .select()
         .single();

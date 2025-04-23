@@ -55,12 +55,18 @@ export function useNotes(itemId?: string) {
     if (!itemId) return null;
     
     try {
+      // Get the current user
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('User must be authenticated to create notes');
+      const userId = session.user.id;
+
       const { data, error } = await supabase
         .from('notes')
         .insert({
           item_id: itemId,
           title,
-          content: ''
+          content: '',
+          user_id: userId
         })
         .select()
         .single();
