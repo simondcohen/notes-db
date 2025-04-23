@@ -9,6 +9,11 @@ const formatDate = (date: Date): string => {
   return date.toISOString();
 };
 
+// Create a slug from a string (lowercase + underscores)
+const createSlug = (text: string): string => {
+  return text.toLowerCase().replace(/\s+/g, '_');
+};
+
 // Convert a note to markdown with YAML frontmatter
 const noteToMarkdown = (note: Note): string => {
   const frontmatter = [
@@ -17,10 +22,11 @@ const noteToMarkdown = (note: Note): string => {
     `title: ${note.title}`,
     `created: ${formatDate(new Date())}`, // We'd need the created date from the DB
     `updated: ${formatDate(note.lastModified || new Date())}`,
+    note.tags && note.tags.length > 0 ? `tags: [${note.tags.map(tag => `"${tag.name}"`).join(', ')}]` : '',
     '---',
     '',
     note.content
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   return frontmatter;
 };
@@ -144,12 +150,12 @@ export async function exportAsZip(userId: string, notebookId: string) {
 }
 
 // Parse YAML frontmatter from markdown content
-const parseMarkdownFrontmatter = (content: string): { frontmatter: Record<string, string>, body: string } => {
+const parseMarkdownFrontmatter = (content: string): { frontmatter: Record<string, string>, body: string, tags: string[] } => {
   const frontmatterRegex = /^---\n((?:.|\n)*?)\n---\n((?:.|\n)*)$/;
   const match = content.match(frontmatterRegex);
   
   if (!match) {
-    return { frontmatter: {}, body: content };
+    return { frontmatter: {}, body: content, tags: [] };
   }
   
   const frontmatterStr = match[1];
@@ -158,7 +164,17 @@ const parseMarkdownFrontmatter = (content: string): { frontmatter: Record<string
   // Parse YAML frontmatter
   const frontmatter: Record<string, string> = {};
   const lines = frontmatterStr.split('\n');
+  let tags: string[] = [];
+  
+  // First pass to extract direct tags
   for (const line of lines) {
+    if (line.trim().startsWith('tags:')) {
+      const tagsMatch = line.match(/tags:\s*\[(.*)\]/);
+      if (tagsMatch && tagsMatch[1]) {
+        tags = parseTags(tagsMatch[1]);
+      }
+    }
+    
     const [key, ...valueParts] = line.split(':');
     if (key && valueParts.length) {
       let value = valueParts.join(':').trim();
@@ -171,7 +187,71 @@ const parseMarkdownFrontmatter = (content: string): { frontmatter: Record<string
     }
   }
   
-  return { frontmatter, body };
+  // Look for tags in metadata if not directly found
+  if (tags.length === 0 && frontmatter.metadata) {
+    try {
+      const metadataStr = frontmatter.metadata;
+      if (metadataStr.includes('tags:')) {
+        const tagsMatch = metadataStr.match(/tags:\s*\[(.*)\]/);
+        if (tagsMatch && tagsMatch[1]) {
+          tags = parseTags(tagsMatch[1]);
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing metadata tags:', error);
+    }
+  }
+  
+  return { frontmatter, body, tags };
+};
+
+// Helper to parse tag strings from a YAML array
+const parseTags = (tagsStr: string): string[] => {
+  // Handle quoted strings with commas
+  const tags: string[] = [];
+  let currentTag = '';
+  let inQuotes = false;
+  let quoteChar = '';
+  
+  for (let i = 0; i < tagsStr.length; i++) {
+    const char = tagsStr[i];
+    
+    if ((char === '"' || char === "'") && (i === 0 || tagsStr[i-1] !== '\\')) {
+      if (!inQuotes) {
+        inQuotes = true;
+        quoteChar = char;
+      } else if (char === quoteChar) {
+        inQuotes = false;
+        if (currentTag.trim()) {
+          tags.push(currentTag.trim());
+          currentTag = '';
+        }
+      } else {
+        currentTag += char;
+      }
+    } else if (char === ',' && !inQuotes) {
+      if (currentTag.trim()) {
+        tags.push(currentTag.trim());
+        currentTag = '';
+      }
+    } else {
+      currentTag += char;
+    }
+  }
+  
+  if (currentTag.trim()) {
+    tags.push(currentTag.trim());
+  }
+  
+  // Clean up quotes and spaces
+  return tags.map(tag => {
+    tag = tag.trim();
+    if ((tag.startsWith('"') && tag.endsWith('"')) || 
+        (tag.startsWith("'") && tag.endsWith("'"))) {
+      tag = tag.substring(1, tag.length - 1);
+    }
+    return tag;
+  });
 };
 
 // Import notes from a zip file
@@ -190,7 +270,10 @@ export async function importFromZip(userId: string, file: File) {
     // Process each markdown file
     for (const filePath of markdownFiles) {
       const fileContent = await zipContents.files[filePath].async('string');
-      const { frontmatter, body } = parseMarkdownFrontmatter(fileContent);
+      const { frontmatter, body, tags } = parseMarkdownFrontmatter(fileContent);
+      
+      // Process tags first - upsert tags and get IDs
+      const tagIds = await processNoteTags(userId, tags);
       
       // We need ID to check for existing notes, but we'll add new notes without ID
       if (!frontmatter.id) {
@@ -201,7 +284,7 @@ export async function importFromZip(userId: string, file: File) {
           
           // If path has fewer than 3 levels, create note in "Imported" notebook
           if (pathParts.length < 3) {
-            await createNoteInImportedNotebook(userId, frontmatter.title, body);
+            await createNoteInImportedNotebook(userId, frontmatter.title, body, tagIds);
             addedCount++;
             continue;
           }
@@ -209,15 +292,18 @@ export async function importFromZip(userId: string, file: File) {
           // Continue with creating note in proper location
           // Extract notebook, section, and item titles from path
           const notebookTitle = pathParts[0].replace(/_/g, ' ');
+          const notebookSlug = createSlug(notebookTitle);
           const sectionTitle = pathParts[1].replace(/_/g, ' ');
+          const sectionSlug = createSlug(sectionTitle);
           const itemTitle = pathParts[2].replace(/_/g, ' ');
+          const itemSlug = createSlug(itemTitle);
           
           // Find or create notebook
           const { data: notebookData } = await supabase
             .from('notebooks')
             .select('id')
             .eq('user_id', userId)
-            .eq('title', notebookTitle);
+            .eq('slug', notebookSlug);
             
           let notebookId;
           
@@ -228,6 +314,7 @@ export async function importFromZip(userId: string, file: File) {
               .from('notebooks')
               .insert({
                 title: notebookTitle,
+                slug: notebookSlug,
                 user_id: userId
               })
               .select('id')
@@ -242,7 +329,7 @@ export async function importFromZip(userId: string, file: File) {
             .from('sections')
             .select('id, position')
             .eq('notebook_id', notebookId)
-            .eq('title', sectionTitle);
+            .eq('slug', sectionSlug);
             
           let sectionId;
           
@@ -263,6 +350,7 @@ export async function importFromZip(userId: string, file: File) {
               .from('sections')
               .insert({
                 title: sectionTitle,
+                slug: sectionSlug,
                 notebook_id: notebookId,
                 position,
                 user_id: userId
@@ -279,7 +367,7 @@ export async function importFromZip(userId: string, file: File) {
             .from('items')
             .select('id')
             .eq('section_id', sectionId)
-            .eq('title', itemTitle);
+            .eq('slug', itemSlug);
             
           let itemId;
           
@@ -300,6 +388,7 @@ export async function importFromZip(userId: string, file: File) {
               .from('items')
               .insert({
                 title: itemTitle,
+                slug: itemSlug,
                 section_id: sectionId,
                 position
               })
@@ -311,15 +400,23 @@ export async function importFromZip(userId: string, file: File) {
           }
           
           // Create the note
-          const { error: noteError } = await supabase
+          const { data: noteData, error: noteError } = await supabase
             .from('notes')
             .insert({
               title: frontmatter.title,
               item_id: itemId,
               content: body
-            });
+            })
+            .select('id')
+            .single();
             
           if (noteError) throw noteError;
+          
+          // Link tags to the note
+          if (tagIds.length > 0 && noteData) {
+            await linkNoteTags(noteData.id, tagIds);
+          }
+          
           addedCount++;
         } catch (error) {
           console.error(`Error creating note from ${filePath}:`, error);
@@ -350,6 +447,22 @@ export async function importFromZip(userId: string, file: File) {
           if (updateError) {
             console.error(`Error updating note ${frontmatter.id}:`, updateError);
           } else {
+            // Update tags for the note
+            try {
+              // First, remove existing tags
+              await supabase
+                .from('note_tags')
+                .delete()
+                .eq('note_id', frontmatter.id);
+                
+              // Then link the new tags
+              if (tagIds.length > 0) {
+                await linkNoteTags(frontmatter.id, tagIds);
+              }
+            } catch (tagError) {
+              console.error(`Error updating tags for note ${frontmatter.id}:`, tagError);
+            }
+            
             updatedCount++;
           }
         } else {
@@ -360,22 +473,25 @@ export async function importFromZip(userId: string, file: File) {
             
             // If path has fewer than 3 levels, create note in "Imported" notebook
             if (pathParts.length < 3) {
-              await createNoteInImportedNotebook(userId, frontmatter.title, body);
+              await createNoteInImportedNotebook(userId, frontmatter.title, body, tagIds, frontmatter.id);
               addedCount++;
               continue;
             }
             
             // Extract notebook, section, and item titles from path
             const notebookTitle = pathParts[0].replace(/_/g, ' ');
+            const notebookSlug = createSlug(notebookTitle);
             const sectionTitle = pathParts[1].replace(/_/g, ' ');
+            const sectionSlug = createSlug(sectionTitle);
             const itemTitle = pathParts[2].replace(/_/g, ' ');
+            const itemSlug = createSlug(itemTitle);
             
             // Find or create notebook
             const { data: notebookData } = await supabase
               .from('notebooks')
               .select('id')
               .eq('user_id', userId)
-              .eq('title', notebookTitle);
+              .eq('slug', notebookSlug);
               
             let notebookId;
             
@@ -386,6 +502,7 @@ export async function importFromZip(userId: string, file: File) {
                 .from('notebooks')
                 .insert({
                   title: notebookTitle,
+                  slug: notebookSlug,
                   user_id: userId
                 })
                 .select('id')
@@ -400,7 +517,7 @@ export async function importFromZip(userId: string, file: File) {
               .from('sections')
               .select('id, position')
               .eq('notebook_id', notebookId)
-              .eq('title', sectionTitle);
+              .eq('slug', sectionSlug);
               
             let sectionId;
             
@@ -421,6 +538,7 @@ export async function importFromZip(userId: string, file: File) {
                 .from('sections')
                 .insert({
                   title: sectionTitle,
+                  slug: sectionSlug,
                   notebook_id: notebookId,
                   position,
                   user_id: userId
@@ -437,7 +555,7 @@ export async function importFromZip(userId: string, file: File) {
               .from('items')
               .select('id')
               .eq('section_id', sectionId)
-              .eq('title', itemTitle);
+              .eq('slug', itemSlug);
               
             let itemId;
             
@@ -458,6 +576,7 @@ export async function importFromZip(userId: string, file: File) {
                 .from('items')
                 .insert({
                   title: itemTitle,
+                  slug: itemSlug,
                   section_id: sectionId,
                   position
                 })
@@ -479,6 +598,12 @@ export async function importFromZip(userId: string, file: File) {
               });
               
             if (noteError) throw noteError;
+            
+            // Link tags to the note
+            if (tagIds.length > 0) {
+              await linkNoteTags(frontmatter.id, tagIds);
+            }
+            
             addedCount++;
           } catch (error) {
             console.error(`Error creating note from ${filePath}:`, error);
@@ -494,15 +619,100 @@ export async function importFromZip(userId: string, file: File) {
   }
 }
 
-// Helper function to create a note in the "Imported" notebook when path is missing levels
-async function createNoteInImportedNotebook(userId: string, noteTitle: string, noteContent: string) {
+// Helper function to process tags for a note
+async function processNoteTags(userId: string, tags: string[]): Promise<string[]> {
+  if (!tags || tags.length === 0) return [];
+  
+  const tagIds: string[] = [];
+  
+  for (const tagName of tags) {
+    if (!tagName.trim()) continue;
+    
+    try {
+      const tagSlug = createSlug(tagName);
+      
+      // Upsert the tag
+      const { data, error } = await supabase
+        .rpc('upsert_tag', {
+          p_name: tagName,
+          p_slug: tagSlug,
+          p_user_id: userId
+        });
+      
+      if (error) {
+        console.error(`Error upserting tag ${tagName}:`, error);
+        
+        // Fallback method if RPC fails
+        const { data: tagData, error: tagError } = await supabase
+          .from('tags')
+          .upsert({
+            name: tagName,
+            slug: tagSlug,
+            user_id: userId
+          }, {
+            onConflict: 'slug,user_id'
+          })
+          .select('id')
+          .single();
+          
+        if (tagError) {
+          console.error(`Fallback tag upsert for ${tagName} failed:`, tagError);
+          continue;
+        }
+        
+        if (tagData) tagIds.push(tagData.id);
+      } else if (data) {
+        tagIds.push(data);
+      }
+    } catch (error) {
+      console.error(`Error processing tag ${tagName}:`, error);
+    }
+  }
+  
+  return tagIds;
+}
+
+// Helper function to link tags to a note
+async function linkNoteTags(noteId: string, tagIds: string[]): Promise<void> {
+  if (!tagIds || tagIds.length === 0) return;
+  
   try {
+    const noteTagsToInsert = tagIds.map(tagId => ({
+      note_id: noteId,
+      tag_id: tagId
+    }));
+    
+    const { error } = await supabase
+      .from('note_tags')
+      .insert(noteTagsToInsert);
+      
+    if (error) {
+      console.error(`Error linking tags to note ${noteId}:`, error);
+    }
+  } catch (error) {
+    console.error(`Error linking tags to note ${noteId}:`, error);
+  }
+}
+
+// Helper function to create a note in the "Imported" notebook when path is missing levels
+async function createNoteInImportedNotebook(
+  userId: string, 
+  noteTitle: string, 
+  noteContent: string, 
+  tagIds: string[] = [],
+  noteId?: string
+) {
+  try {
+    const importedNotebookSlug = 'imported';
+    const importedSectionSlug = 'imported_notes';
+    const importedItemSlug = 'imported_items';
+    
     // Find or create "Imported" notebook
     const { data: notebookData } = await supabase
       .from('notebooks')
       .select('id')
       .eq('user_id', userId)
-      .eq('title', 'Imported');
+      .eq('slug', importedNotebookSlug);
       
     let notebookId;
     
@@ -513,6 +723,7 @@ async function createNoteInImportedNotebook(userId: string, noteTitle: string, n
         .from('notebooks')
         .insert({
           title: 'Imported',
+          slug: importedNotebookSlug,
           user_id: userId
         })
         .select('id')
@@ -527,7 +738,7 @@ async function createNoteInImportedNotebook(userId: string, noteTitle: string, n
       .from('sections')
       .select('id')
       .eq('notebook_id', notebookId)
-      .eq('title', 'Imported Notes');
+      .eq('slug', importedSectionSlug);
       
     let sectionId;
     
@@ -538,6 +749,7 @@ async function createNoteInImportedNotebook(userId: string, noteTitle: string, n
         .from('sections')
         .insert({
           title: 'Imported Notes',
+          slug: importedSectionSlug,
           notebook_id: notebookId,
           position: 0,
           user_id: userId
@@ -554,7 +766,7 @@ async function createNoteInImportedNotebook(userId: string, noteTitle: string, n
       .from('items')
       .select('id')
       .eq('section_id', sectionId)
-      .eq('title', 'Imported Items');
+      .eq('slug', importedItemSlug);
       
     let itemId;
     
@@ -565,6 +777,7 @@ async function createNoteInImportedNotebook(userId: string, noteTitle: string, n
         .from('items')
         .insert({
           title: 'Imported Items',
+          slug: importedItemSlug,
           section_id: sectionId,
           position: 0
         })
@@ -576,15 +789,29 @@ async function createNoteInImportedNotebook(userId: string, noteTitle: string, n
     }
     
     // Create the note
-    const { error: noteError } = await supabase
+    const noteInsert: any = {
+      title: noteTitle,
+      item_id: itemId,
+      content: noteContent
+    };
+    
+    // Add ID if provided
+    if (noteId) {
+      noteInsert.id = noteId;
+    }
+    
+    const { data: noteData, error: noteError } = await supabase
       .from('notes')
-      .insert({
-        title: noteTitle,
-        item_id: itemId,
-        content: noteContent
-      });
+      .insert(noteInsert)
+      .select('id')
+      .single();
       
     if (noteError) throw noteError;
+    
+    // Link tags to the note
+    if (tagIds.length > 0 && noteData) {
+      await linkNoteTags(noteData.id, tagIds);
+    }
     
     return true;
   } catch (error) {
