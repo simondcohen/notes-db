@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Save, Clock, ChevronDown, Upload, LogOut, Download, Tag, X } from 'lucide-react';
+import { Search, Save, Clock, ChevronDown, Upload, LogOut, Download, Tag, X, Database } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ImportDialog } from './ImportDialog';
-import { exportData } from '../utils/exportData';
+import { ExportBackupDialog } from './ExportBackupDialog';
 import { NotebookSelector } from './NotebookSelector';
 import { useReadingQueue } from '../hooks/useReadingQueue';
 import { SearchResults, SearchResult } from './SearchResults';
@@ -43,6 +43,7 @@ export function TopBar({
   onSearchResultSelect,
 }: TopBarProps) {
   const [showImportDialog, setShowImportDialog] = React.useState(false);
+  const [showExportDialog, setShowExportDialog] = React.useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -321,16 +322,6 @@ export function TopBar({
     }
   };
 
-  const handleExportAll = async () => {
-    if (!userId) return;
-    try {
-      await exportData(userId);
-    } catch (error) {
-      console.error('Error exporting data:', error);
-      alert('Failed to export data. Please try again.');
-    }
-  };
-
   return (
     <>
       <div className="h-14 bg-white border-b border-gray-200 flex items-center px-4 justify-between">
@@ -419,11 +410,11 @@ export function TopBar({
                 <span>Import</span>
               </button>
               <button
-                onClick={handleExportAll}
+                onClick={() => setShowExportDialog(true)}
                 className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
               >
-                <Download className="h-4 w-4" />
-                <span>Export All</span>
+                <Database className="h-4 w-4" />
+                <span>Export Backup</span>
               </button>
             </>
           )}
@@ -459,6 +450,15 @@ export function TopBar({
           userId={userId}
           onClose={() => setShowImportDialog(false)}
           onImportComplete={onImportComplete}
+        />
+      )}
+
+      {showExportDialog && userId && (
+        <ExportBackupDialog
+          isOpen={showExportDialog}
+          onClose={() => setShowExportDialog(false)}
+          userId={userId}
+          notebooks={notebooks}
         />
       )}
     </>

@@ -8,6 +8,7 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 import AppUI from './AppUI';
 import { TagNotesView } from './views/TagNotesView';
 import { AllTagsView } from './views/AllTagsView';
+import { ToastProvider } from './components/ui/Toast';
 
 function RouteStateManager() {
   const location = useLocation();
@@ -70,14 +71,16 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
-      <RouteStateManager />
-      <Routes>
-        <Route path="/tag/:tagName" element={<TagNotesView />} />
-        <Route path="/tags" element={<AllTagsView />} />
-        <Route path="/nb/:notebookId/*" element={<MainApp session={session} />} />
-        <Route path="/*" element={<MainApp session={session} />} />
-      </Routes>
-    </BrowserRouter>
+    <ToastProvider>
+      <BrowserRouter>
+        <RouteStateManager />
+        <Routes>
+          <Route path="/tag/:tagName" element={<TagNotesView />} />
+          <Route path="/tags" element={<AllTagsView />} />
+          <Route path="/nb/:notebookId/*" element={<MainApp session={session} />} />
+          <Route path="/*" element={<MainApp session={session} />} />
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   );
 }

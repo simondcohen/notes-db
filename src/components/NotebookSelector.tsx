@@ -1,7 +1,9 @@
-import React from 'react';
-import { Book, ChevronDown, Plus, Download, Pencil, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Book, ChevronDown, Plus, Pencil, Trash2, Archive, Upload } from 'lucide-react';
 import type { Notebook } from '../types';
-import { exportData } from '../utils/exportData';
+import { exportAsZip } from '../utils/zipExportImport';
+import { ZipImportDialog } from './ZipImportDialog';
+import { useToast } from './ui/Toast';
 
 interface NotebookSelectorProps {
   notebooks: Notebook[];
@@ -24,8 +26,10 @@ export function NotebookSelector({
 }: NotebookSelectorProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [isRenaming, setIsRenaming] = React.useState<string | null>(null);
+  const [isZipImportDialogOpen, setIsZipImportDialogOpen] = useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
+  const { showToast } = useToast();
 
   const selectedNotebookData = notebooks?.find(n => n.id === selectedNotebook);
 
@@ -60,13 +64,18 @@ export function NotebookSelector({
     }
   };
 
-  const handleExport = async (notebookId: string) => {
+  const handleExportAsZip = async (notebookId: string) => {
     try {
-      await exportData(userId, notebookId);
+      await exportAsZip(userId, notebookId);
+      showToast('Notebook exported successfully as ZIP', 'success');
     } catch (error) {
-      console.error('Error exporting notebook:', error);
-      alert('Failed to export notebook. Please try again.');
+      console.error('Error exporting notebook as zip:', error);
+      showToast('Failed to export notebook as ZIP. Please try again.', 'error');
     }
+  };
+
+  const handleImportComplete = (result: { updated: number; added: number }) => {
+    showToast(`Import complete: ${result.updated} notes updated, ${result.added} notes added.`, 'success');
   };
 
   return (
@@ -130,11 +139,11 @@ export function NotebookSelector({
                       className="p-1 hover:bg-gray-200 rounded-lg text-gray-600"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleExport(notebook.id);
+                        handleExportAsZip(notebook.id);
                       }}
-                      title="Export notebook"
+                      title="Export notebook as ZIP"
                     >
-                      <Download className="h-4 w-4" />
+                      <Archive className="h-4 w-4" />
                     </button>
                     <button
                       className="p-1 hover:bg-red-100 rounded-lg text-red-600"
@@ -163,9 +172,28 @@ export function NotebookSelector({
               <Plus className="h-4 w-4" />
               <span>New Notebook</span>
             </button>
+            <button
+              className="w-full px-3 py-2 text-left text-gray-600 hover:bg-gray-50 flex items-center space-x-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsZipImportDialogOpen(true);
+                setIsOpen(false);
+              }}
+            >
+              <Upload className="h-4 w-4" />
+              <span>Import ZIP</span>
+            </button>
           </div>
         </div>
       )}
+      
+      {/* Import ZIP Dialog */}
+      <ZipImportDialog
+        isOpen={isZipImportDialogOpen}
+        onClose={() => setIsZipImportDialogOpen(false)}
+        userId={userId}
+        onImportComplete={handleImportComplete}
+      />
     </div>
   );
 }
