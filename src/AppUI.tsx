@@ -205,6 +205,16 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     notebook => notebook?.id === selectedNotebook
   ) || null;
 
+  // Add dynamic document title
+  useEffect(() => {
+    if (activeNotebook?.title) {
+      document.title = `${activeNotebook.title} — Notes`;
+    } else {
+      document.title = 'Notes App';
+    }
+    return () => { document.title = 'Notes App'; };
+  }, [activeNotebook?.title]);
+
   const activeSection = sections?.find(
     section => section?.id === selectedSection
   ) || null;
