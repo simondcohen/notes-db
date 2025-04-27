@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Book, Plus, X } from 'lucide-react';
 import type { Notebook } from '../types';
 import { EditableText } from './EditableText';
+import { DeleteNotebookDialog } from './DeleteNotebookDialog';
 
 interface NotebookSidebarProps {
   notebooks: Notebook[];
@@ -25,6 +26,22 @@ export function NotebookSidebar({
   onDeleteNotebook,
 }: NotebookSidebarProps) {
   if (!isOpen) return null;
+  
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [notebookToDelete, setNotebookToDelete] = useState<{ id: string; title: string } | null>(null);
+  
+  const handleDeleteNotebook = (notebookId: string, notebookTitle: string) => {
+    setNotebookToDelete({ id: notebookId, title: notebookTitle });
+    setDeleteDialogOpen(true);
+  };
+  
+  const confirmDelete = () => {
+    if (notebookToDelete) {
+      onDeleteNotebook(notebookToDelete.id);
+      setDeleteDialogOpen(false);
+      setNotebookToDelete(null);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -71,9 +88,7 @@ export function NotebookSidebar({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (window.confirm(`Are you sure you want to delete "${notebook.title}"?`)) {
-                        onDeleteNotebook(notebook.id);
-                      }
+                      handleDeleteNotebook(notebook.id, notebook.title);
                     }}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 text-red-600 rounded"
                   >
@@ -110,6 +125,19 @@ export function NotebookSidebar({
           </button>
         </div>
       </div>
+      
+      {/* Delete Notebook Dialog */}
+      {notebookToDelete && (
+        <DeleteNotebookDialog
+          isOpen={deleteDialogOpen}
+          notebookTitle={notebookToDelete.title}
+          onClose={() => {
+            setDeleteDialogOpen(false);
+            setNotebookToDelete(null);
+          }}
+          onConfirm={confirmDelete}
+        />
+      )}
     </div>
   );
 }

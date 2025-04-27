@@ -6,6 +6,7 @@ import { EditableText } from './EditableText';
 import { RichTextEditor } from './RichTextEditor';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from './ui/command';
 import { useTags } from '../hooks/useTags';
+import { DeleteNoteDialog } from './DeleteNoteDialog';
 
 interface EditorColumnProps {
   notes: Note[];
@@ -38,10 +39,19 @@ export function EditorColumn({
   const [isTagsOpen, setIsTagsOpen] = useState(false);
   const { tags, addTag, loading: tagsLoading } = useTags(userId);
   const location = useLocation();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [noteToDelete, setNoteToDelete] = useState<{ id: string; title: string } | null>(null);
 
   const handleDeleteNote = async (noteId: string, noteTitle: string) => {
-    if (window.confirm(`Are you sure you want to delete the note "${noteTitle}"?`)) {
-      await onDeleteNote(noteId);
+    setNoteToDelete({ id: noteId, title: noteTitle });
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (noteToDelete) {
+      await onDeleteNote(noteToDelete.id);
+      setDeleteDialogOpen(false);
+      setNoteToDelete(null);
     }
   };
 
@@ -198,6 +208,19 @@ export function EditorColumn({
           </div>
         )}
       </div>
+
+      {/* Delete Note Dialog */}
+      {noteToDelete && (
+        <DeleteNoteDialog
+          isOpen={deleteDialogOpen}
+          noteTitle={noteToDelete.title}
+          onClose={() => {
+            setDeleteDialogOpen(false);
+            setNoteToDelete(null);
+          }}
+          onConfirm={confirmDelete}
+        />
+      )}
     </div>
   );
 }

@@ -39,8 +39,13 @@ const loadPersistedState = (userId: string): PersistedState => {
   return stored ? JSON.parse(stored) : {};
 };
 
-const savePersistedState = (userId: string, state: PersistedState) => {
-  localStorage.setItem(`appState_${userId}`, JSON.stringify(state));
+const savePersistedState = (userId: string, partial: PersistedState) => {
+  const existing = loadPersistedState(userId);
+  const merged: PersistedState = { ...existing };
+  Object.entries(partial).forEach(([k, v]) => {
+    if (v !== undefined) merged[k as keyof PersistedState] = v;
+  });
+  localStorage.setItem(`appState_${userId}`, JSON.stringify(merged));
 };
 
 export default function AppUI({ session, initialNote }: AppUIProps) {
@@ -170,8 +175,22 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
   }, [sections]);
 
   useEffect(() => {
+    const persisted = loadPersistedState(session.user.id);
+    
     if (urlNotebookId) {
       setSelectedNotebook(urlNotebookId);
+
+      // If we've saved state **for this same notebook**, restore it
+      if (persisted.selectedNotebook === urlNotebookId) {
+        setSelectedSection(persisted.selectedSection);
+        setSelectedItem(persisted.selectedItem);
+        setSelectedNote(persisted.selectedNote);
+      } else {
+        // New notebook → start clean
+        setSelectedSection(undefined);
+        setSelectedItem(undefined);
+        setSelectedNote(undefined);
+      }
     } else if (initialNote) {
       setSelectedNotebook(initialNote.notebookId);
       setSelectedSection(initialNote.sectionId);
