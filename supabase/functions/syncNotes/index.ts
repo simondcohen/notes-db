@@ -102,7 +102,16 @@ serve(async () => {
     const section = note.items[0]?.sections[0];
     const item = note.items[0];
     
-    if (!notebook || !section || !item) continue;
+    if (!notebook || !section || !item) {
+      console.log(
+        "SKIP",
+        note.id,
+        !item && "no item",
+        !section && "no section",
+        !notebook && "no notebook"
+      );
+      continue;
+    }
     
     const filePath = `${slug(notebook.title)}/${slug(section.title)}/${slug(item.title)}/${slug(note.title)}.md`;
     stillAlive.add(filePath);
