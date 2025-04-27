@@ -435,6 +435,16 @@ export function TopBar({
           </button>
 
           <button
+            className="ml-2 rounded px-3 py-1 text-sm bg-indigo-600 text-white hover:bg-indigo-500"
+            onClick={async () => {
+              const res = await fetch("/functions/v1/syncNotes");
+              alert(res.ok ? "Notes synced to GitHub!" : "Sync failed — see console");
+            }}
+          >
+            Sync Notes
+          </button>
+
+          <button
             onClick={handleSignOut}
             className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
             title="Sign out"
