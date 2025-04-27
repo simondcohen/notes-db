@@ -15,8 +15,8 @@ export function TagNotesView() {
   const handleBack = () => navigate(-1);
 
   const handleNoteClick = (note: any) => {
-    // Navigate back to the main app view with the note to open
-    navigate('/', {
+    // Navigate to the notebook with the note to open
+    navigate(`/nb/${note.notebookId}`, {
       state: {
         noteToOpen: {
           notebookId: note.notebookId,

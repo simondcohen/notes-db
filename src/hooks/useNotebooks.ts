@@ -21,7 +21,15 @@ export function useNotebooks(userId: string) {
 
       if (error) throw error;
 
-      setNotebooks(data || []);
+      // Convert database records to Notebook objects with proper date handling
+      const formattedNotebooks = (data || []).map(notebook => ({
+        id: notebook.id,
+        title: notebook.title,
+        sections: [],
+        lastModified: notebook.last_modified ? new Date(notebook.last_modified) : new Date()
+      }));
+
+      setNotebooks(formattedNotebooks);
     } catch (error) {
       const message = (error as Error).message;
       console.error('Error loading notebooks:', message);

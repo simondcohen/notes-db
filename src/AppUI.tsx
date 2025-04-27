@@ -246,7 +246,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     setSelectedItem(undefined);
     setSelectedNote(undefined);
     setIsSidebarOpen(false);
-    navigate('/nb/' + notebookId);
+    navigate(`/nb/${notebookId}`);
   };
 
   const handleCreateNotebook = async () => {
