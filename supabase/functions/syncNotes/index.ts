@@ -43,21 +43,30 @@ async function upsert(path: string, content: string, sha?: string) {
     content: b64(new TextEncoder().encode(content)),
     encoding: "base64"
   };
-  if (sha) payload.sha = sha;        // include sha only when it exists
+  if (sha) payload.sha = sha;
 
-  const res = await fetch(
-    `https://api.github.com/repos/${notesRepo}/contents/${path}`,
-    {
-      method: "PUT",
-      headers: {
-        Authorization: `token ${githubToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const res = await fetch(
+      `https://api.github.com/repos/${notesRepo}/contents/${path}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `token ${githubToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    if (res.ok) return;                       // success
+
+    // retry only on 5xx
+    if (res.status >= 500 && attempt < 3) {
+      console.warn(`Retry ${attempt} for ${path} (status ${res.status})`);
+      await new Promise(r => setTimeout(r, 1000 * attempt)); // 1s, 2s
+      continue;
     }
-  );
 
-  if (!res.ok) {
     const txt = await res.text();
     console.error("GITHUB-ERROR", res.status, txt);
     throw new Error(`GitHub ${res.status}`);
