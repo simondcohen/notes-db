@@ -40,8 +40,8 @@ serve(async () => {
       "---",
       "",
     ].join("\n");
-    const md = front + (n.content || "");
-    await pushFile(`${n.id}.md`, md);
+    const fileBody = '# ' + (n.title || 'Untitled') + '\n\n' + (n.content || "");
+    await pushFile(`${n.id}.md`, front + fileBody);
   }
 
   return new Response("notes synced", { status: 200 });
