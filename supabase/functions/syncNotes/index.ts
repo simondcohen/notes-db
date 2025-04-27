@@ -160,7 +160,10 @@ serve(async () => {
       continue;
     }
     
-    const filePath = `${slug(notebook.title)}/${slug(section.title)}/${slug(item.title)}/${slug(note.title)}.md`;
+    let filePath = `${slug(notebook.title)}/${slug(section.title)}/${slug(item.title)}/${slug(note.title)}.md`;
+    if (repo.has(filePath) || stillAlive.has(filePath)) {
+      filePath = `${slug(notebook.title)}/${slug(section.title)}/${slug(item.title)}/${slug(note.title)}-${note.id}.md`;
+    }
     stillAlive.add(filePath);
     
     // Create tag list if any
