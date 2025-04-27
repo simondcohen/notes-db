@@ -45,6 +45,12 @@ export function ItemsColumn({
     })
   );
 
+  const handleDeleteItem = (itemId: string, itemTitle: string) => {
+    if (window.confirm(`Are you sure you want to delete the item "${itemTitle}" and all its contents?`)) {
+      onDeleteItem(itemId);
+    }
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     
@@ -87,7 +93,7 @@ export function ItemsColumn({
                   item={item}
                   isSelected={selectedItem === item.id}
                   onSelect={onSelectItem}
-                  onDelete={onDeleteItem}
+                  onDelete={(itemId) => handleDeleteItem(itemId, item.title)}
                   onUpdateTitle={onUpdateItemTitle}
                 />
               ))}
