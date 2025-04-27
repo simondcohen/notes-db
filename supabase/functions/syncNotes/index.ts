@@ -78,6 +78,8 @@ serve(async () => {
   const repo = await listRepo();
   const stillAlive = new Set<string>();
 
+  console.log("SYNC-DEBUG note count", notes.length);
+  
   // 3 · upsert each note
   for (const note of notes) {
     // Build file path using slugs
