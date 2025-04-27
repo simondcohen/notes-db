@@ -37,7 +37,7 @@ async function listRepo() {
 }
 
 // upsert, supplying sha when required
-async function upsert(path:string, content:string, sha?:string) {
+async function upsert(path: string, content: string, sha?: string) {
   const payload: any = {
     message: `sync ${path}`,
     content: b64(new TextEncoder().encode(content)),
@@ -45,15 +45,18 @@ async function upsert(path:string, content:string, sha?:string) {
   };
   if (sha) payload.sha = sha;
 
-  const res = await fetch(`https://api.github.com/repos/${notesRepo}/contents/${path}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `token ${githubToken}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
-  
+  const res = await fetch(
+    `https://api.github.com/repos/${notesRepo}/contents/${path}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `token ${githubToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    }
+  );
+
   if (!res.ok) {
     const txt = await res.text();
     console.error("GITHUB-ERROR", res.status, txt);
