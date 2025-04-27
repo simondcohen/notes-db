@@ -437,8 +437,8 @@ export function TopBar({
           <button
             className="ml-2 rounded px-3 py-1 text-sm bg-indigo-600 text-white hover:bg-indigo-500"
             onClick={async () => {
-              const res = await fetch("/functions/v1/syncNotes");
-              alert(res.ok ? "Notes synced to GitHub!" : "Sync failed — see console");
+              const { error } = await supabase.functions.invoke("syncNotes");
+              alert(!error ? "Notes synced to GitHub!" : `Sync failed: ${error.message}`);
             }}
           >
             Sync Notes
