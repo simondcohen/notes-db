@@ -82,12 +82,48 @@ export function useNotes(itemId?: string) {
 
   const updateNote = async (noteId: string, updates: Partial<{ title: string; content: string }>) => {
     try {
+      // Update the note
       const { error } = await supabase
         .from('notes')
         .update(updates)
         .eq('id', noteId);
 
       if (error) throw error;
+      
+      // Get the item_id for this note
+      const { data: noteData, error: noteError } = await supabase
+        .from('notes')
+        .select('item_id')
+        .eq('id', noteId)
+        .single();
+      
+      if (noteError) throw noteError;
+      
+      // Get the section_id from the item
+      const { data: itemData, error: itemError } = await supabase
+        .from('items')
+        .select('section_id')
+        .eq('id', noteData.item_id)
+        .single();
+      
+      if (itemError) throw itemError;
+      
+      // Get the notebook_id from the section
+      const { data: sectionData, error: sectionError } = await supabase
+        .from('sections')
+        .select('notebook_id')
+        .eq('id', itemData.section_id)
+        .single();
+      
+      if (sectionError) throw sectionError;
+      
+      // Update the notebook's last_modified timestamp
+      const { error: notebookError } = await supabase
+        .from('notebooks')
+        .update({ last_modified: new Date().toISOString() })
+        .eq('id', sectionData.notebook_id);
+      
+      if (notebookError) throw notebookError;
       
       setNotes(prev =>
         prev.map(n =>
