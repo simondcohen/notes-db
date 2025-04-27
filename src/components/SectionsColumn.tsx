@@ -18,6 +18,8 @@ import {
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import type { Section } from '../types';
 import { DraggableSectionItem } from './DraggableSectionItem';
+import { exportSectionAsZip } from '../utils/zipExportImport';
+import { useToast } from './ui/Toast';
 
 interface SectionsColumnProps {
   sections: Section[];
@@ -27,6 +29,7 @@ interface SectionsColumnProps {
   onDeleteSection: (sectionId: string) => void;
   onUpdateSectionTitle: (sectionId: string, newTitle: string) => void;
   onReorderSections: (sections: Section[]) => void;
+  userId: string;
 }
 
 export function SectionsColumn({
@@ -37,7 +40,9 @@ export function SectionsColumn({
   onDeleteSection,
   onUpdateSectionTitle,
   onReorderSections,
+  userId,
 }: SectionsColumnProps) {
+  const { showToast } = useToast();
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -48,6 +53,16 @@ export function SectionsColumn({
   const handleDeleteSection = (sectionId: string, sectionTitle: string) => {
     if (window.confirm(`Are you sure you want to delete the section "${sectionTitle}" and all its contents?`)) {
       onDeleteSection(sectionId);
+    }
+  };
+
+  const handleExportSection = async (sectionId: string) => {
+    try {
+      await exportSectionAsZip(userId, sectionId);
+      showToast('Section exported successfully as ZIP', 'success');
+    } catch (error) {
+      console.error('Error exporting section as zip:', error);
+      showToast('Failed to export section as ZIP. Please try again.', 'error');
     }
   };
 
@@ -94,6 +109,7 @@ export function SectionsColumn({
                 onSelect={onSelectSection}
                 onDelete={(sectionId) => handleDeleteSection(sectionId, section.title)}
                 onUpdateTitle={onUpdateSectionTitle}
+                onExport={handleExportSection}
               />
             ))}
           </SortableContext>

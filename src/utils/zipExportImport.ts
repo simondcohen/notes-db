@@ -150,6 +150,100 @@ export async function exportAsZip(userId: string, notebookId: string) {
   }
 }
 
+// Export section as a zip with markdown files
+export async function exportSectionAsZip(userId: string, sectionId: string) {
+  try {
+    // Fetch the section data
+    const { data: sectionData, error: sectionError } = await supabase
+      .from('sections')
+      .select(`
+        id,
+        title,
+        position,
+        notebook_id,
+        items (
+          id,
+          title,
+          position,
+          notes (
+            id,
+            title,
+            content,
+            created_at,
+            updated_at,
+            tags!note_tags(
+              id,
+              name
+            )
+          )
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('id', sectionId)
+      .single();
+
+    if (sectionError) throw sectionError;
+    if (!sectionData) throw new Error('Section not found');
+
+    // Fetch the notebook data separately
+    const { data: notebookData, error: notebookError } = await supabase
+      .from('notebooks')
+      .select('id, title, last_modified')
+      .eq('id', sectionData.notebook_id)
+      .single();
+
+    if (notebookError) throw notebookError;
+    if (!notebookData) throw new Error('Notebook not found');
+
+    const notebook = notebookData;
+    const section = {
+      id: sectionData.id,
+      title: sectionData.title,
+      position: sectionData.position,
+      items: sectionData.items || []
+    };
+    
+    const zip = new JSZip();
+    
+    // Process each item and note in the section
+    for (const item of section.items || []) {
+      for (const note of item.notes || []) {
+        // Convert DB note to our Note type
+        const noteObj: Note = {
+          id: note.id,
+          title: note.title,
+          content: note.content,
+          tags: note.tags?.map(tag => ({
+            id: tag.id,
+            name: tag.name
+          })) || [],
+          lastModified: new Date(note.updated_at)
+        };
+        
+        // Create simplified path for section export
+        const notebookSlug = notebook.title.toLowerCase().replace(/\s+/g, '_');
+        const sectionSlug = section.title.toLowerCase().replace(/\s+/g, '_');
+        const itemSlug = item.title.toLowerCase().replace(/\s+/g, '_');
+        const noteSlug = noteObj.title.toLowerCase().replace(/\s+/g, '_');
+        
+        const notePath = `${notebookSlug}/${sectionSlug}/${itemSlug}/${noteSlug}.md`;
+        const noteContent = noteToMarkdown(noteObj);
+        zip.file(notePath, noteContent);
+      }
+    }
+
+    // Generate and download the zip
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const filename = `section_${section.title.toLowerCase().replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.zip`;
+    saveAs(zipBlob, filename);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error exporting section as zip:', error);
+    throw error;
+  }
+}
+
 // Parse YAML frontmatter from markdown content
 const parseMarkdownFrontmatter = (
   content: string

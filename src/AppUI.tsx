@@ -385,6 +385,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
             onDeleteSection={deleteSection}
             onUpdateSectionTitle={updateSection}
             onReorderSections={reorderSections}
+            userId={session.user.id}
           />
           
           <ItemsColumn

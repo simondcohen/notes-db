@@ -1,7 +1,7 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Trash2 } from 'lucide-react';
+import { GripVertical, Trash2, Archive } from 'lucide-react';
 import type { Section } from '../types';
 import { EditableText } from './EditableText';
 
@@ -11,6 +11,7 @@ interface DraggableSectionItemProps {
   onSelect: (sectionId: string) => void;
   onDelete: (sectionId: string) => void;
   onUpdateTitle: (sectionId: string, newTitle: string) => void;
+  onExport?: (sectionId: string) => void;
 }
 
 export function DraggableSectionItem({
@@ -19,6 +20,7 @@ export function DraggableSectionItem({
   onSelect,
   onDelete,
   onUpdateTitle,
+  onExport,
 }: DraggableSectionItemProps) {
   const {
     attributes,
@@ -64,15 +66,29 @@ export function DraggableSectionItem({
             className="text-gray-700"
           />
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(section.id);
-          }}
-          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-lg"
-        >
-          <Trash2 className="h-4 w-4 text-gray-500" />
-        </button>
+        <div className="flex space-x-1">
+          {onExport && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onExport(section.id);
+              }}
+              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-lg"
+              title="Export section as ZIP"
+            >
+              <Archive className="h-4 w-4 text-gray-500" />
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(section.id);
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-lg"
+          >
+            <Trash2 className="h-4 w-4 text-gray-500" />
+          </button>
+        </div>
       </div>
     </div>
   );
