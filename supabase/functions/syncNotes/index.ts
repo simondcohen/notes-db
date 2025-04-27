@@ -27,7 +27,8 @@ async function listRepo() {
                         { headers:{ Authorization:`token ${githubToken}` } });
   const j:any = await r.json();
   const m = new Map<string,string>();
-  for (const i of j.tree) {
+  const tree = Array.isArray(j.tree) ? j.tree : [];
+  for (const i of tree) {
     if (i.type === "blob" && i.path.endsWith(".md")) {
       m.set(i.path, i.sha);
     }
