@@ -45,7 +45,7 @@ async function upsert(path:string, content:string, sha?:string) {
   };
   if (sha) payload.sha = sha;
 
-  await fetch(`https://api.github.com/repos/${notesRepo}/contents/${path}`, {
+  const res = await fetch(`https://api.github.com/repos/${notesRepo}/contents/${path}`, {
     method: "PUT",
     headers: {
       Authorization: `token ${githubToken}`,
@@ -53,6 +53,12 @@ async function upsert(path:string, content:string, sha?:string) {
     },
     body: JSON.stringify(payload)
   });
+  
+  if (!res.ok) {
+    const txt = await res.text();
+    console.error("GITHUB-ERROR", res.status, txt);
+    throw new Error(`GitHub ${res.status}`);
+  }
 }
 
 // delete by sha
