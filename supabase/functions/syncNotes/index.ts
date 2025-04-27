@@ -136,11 +136,13 @@ serve(async () => {
   // 2 · repo snapshot
   const repo = await listRepo();
   const stillAlive = new Set<string>();
+  let attempted = 0, written = 0, skipped = 0;
 
   console.log("SYNC-DEBUG note count", notes.length);
   
   // 3 · upsert each note
   for (const note of notes) {
+    attempted++;
     // Build file path using slugs
     const item     = note.items;
     const section  = item?.sections;
@@ -154,6 +156,7 @@ serve(async () => {
         !section && "no section",
         !notebook && "no notebook"
       );
+      skipped++;
       continue;
     }
     
@@ -185,11 +188,15 @@ serve(async () => {
     const sha = repo.get(filePath);
     if (sha) {
       const peek = await fetch(`https://raw.githubusercontent.com/${notesRepo}/main/${filePath}`);
-      if (peek.ok && await peek.text() === content) continue;
+      if (peek.ok && await peek.text() === content) {
+        skipped++;
+        continue;
+      }
     }
     
     // Otherwise upsert
     await upsert(filePath, content, sha);
+    written++;
   }
 
   // 4 · prune deletions
@@ -199,5 +206,6 @@ serve(async () => {
     }
   }
 
+  console.log(`SYNC-DONE ${attempted} attempted / ${written} written / ${attempted - written} skipped`);
   return new Response("mirror complete", { status:200 });
 });
