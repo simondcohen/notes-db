@@ -43,7 +43,7 @@ async function upsert(path: string, content: string, sha?: string) {
     content: b64(new TextEncoder().encode(content)),
     encoding: "base64"
   };
-  if (sha) payload.sha = sha;
+  if (sha) payload.sha = sha;        // include sha only when it exists
 
   const res = await fetch(
     `https://api.github.com/repos/${notesRepo}/contents/${path}`,
