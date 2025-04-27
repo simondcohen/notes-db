@@ -8,6 +8,7 @@ import { NotebookSelector } from './NotebookSelector';
 import { useReadingQueue } from '../hooks/useReadingQueue';
 import { SearchResults, SearchResult } from './SearchResults';
 import { Section, Item, Note, Notebook } from '../types';
+import toast from "react-hot-toast";
 
 interface TopBarProps {
   notebooks: Notebook[];
@@ -46,6 +47,7 @@ export function TopBar({
   const [showExportDialog, setShowExportDialog] = React.useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -435,13 +437,24 @@ export function TopBar({
           </button>
 
           <button
-            className="ml-2 rounded px-3 py-1 text-sm bg-indigo-600 text-white hover:bg-indigo-500"
+            disabled={syncing}
+            className={`ml-2 rounded px-3 py-1 text-sm text-white ${
+              syncing ? "bg-gray-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-500"
+            }`}
             onClick={async () => {
-              const { error } = await supabase.functions.invoke("syncNotes");
-              alert(!error ? "Notes synced to GitHub!" : `Sync failed: ${error.message}`);
+              setSyncing(true);
+              await toast.promise(
+                supabase.functions.invoke("syncNotes"),
+                {
+                  loading: "Syncing notes…",
+                  success: "Notes synced to GitHub!",
+                  error: "Sync failed — check console",
+                }
+              );
+              setSyncing(false);
             }}
           >
-            Sync Notes
+            {syncing ? "Syncing…" : "Sync Notes"}
           </button>
 
           <button

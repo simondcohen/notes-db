@@ -11,6 +11,7 @@ import { AllTagsView } from './views/AllTagsView';
 import { NotebookSelectionView } from './views/NotebookSelectionView';
 import { ToastProvider } from './components/ui/Toast';
 import { useNotebooks } from './hooks/useNotebooks';
+import { Toaster } from "react-hot-toast";
 
 function RouteStateManager() {
   const location = useLocation();
@@ -115,6 +116,7 @@ export default function App() {
   return (
     <ToastProvider>
       <BrowserRouter>
+        <Toaster position="top-right" gutter={8} />
         <RouteStateManager />
         <Routes>
           <Route path="/tag/:tagName" element={<TagNotesView />} />
