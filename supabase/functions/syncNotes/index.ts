@@ -77,15 +77,21 @@ async function remove(path:string, sha:string) {
 
 serve(async () => {
   // 1 · live notes with related data
-  const { data: notes, error } = await supabase.from("notes").select(`
-    id, title, created_at, updated_at,
-    items(id, title, slug,
-      sections(id, title, slug,
-        notebooks(id, title, slug)
-      )
-    ),
-    note_tags(tag_id:tags(name))
-  `);
+  const { data: notes, error } = await supabase
+    .from("notes")
+    .select(`
+      id, title, content, created_at, updated_at,
+      items:item_id (
+        id, title, slug,
+        sections:section_id (
+          id, title, slug,
+          notebooks:notebook_id (
+            id, title, slug
+          )
+        )
+      ),
+      note_tags(tag_id:tags(name))
+    `);
   
   if (error) return new Response(error.message, { status:500 });
 
@@ -98,9 +104,9 @@ serve(async () => {
   // 3 · upsert each note
   for (const note of notes) {
     // Build file path using slugs
-    const notebook = note.items[0]?.sections[0]?.notebooks[0];
-    const section = note.items[0]?.sections[0];
-    const item = note.items[0];
+    const item     = note.items;
+    const section  = item?.sections;
+    const notebook = section?.notebooks;
     
     if (!notebook || !section || !item) {
       console.log(
