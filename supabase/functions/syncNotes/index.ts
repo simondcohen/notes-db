@@ -37,15 +37,36 @@ async function listRepo() {
 }
 
 // upsert, supplying sha when required
-async function upsert(path: string, content: string, sha?: string) {
-  const payload: any = {
+async function upsert(path: string, content: string, shaHint?: string) {
+  const payloadBase = {
     message: `sync ${path}`,
     content: b64(new TextEncoder().encode(content)),
     encoding: "base64"
   };
-  if (sha) payload.sha = sha;
 
   for (let attempt = 1; attempt <= 3; attempt++) {
+    let sha = shaHint;
+
+    // If we don't have a sha, ask GitHub; 404 means create
+    if (!sha) {
+      const probe = await fetch(
+        `https://api.github.com/repos/${notesRepo}/contents/${path}`,
+        { headers: { Authorization: `token ${githubToken}` } }
+      );
+      if (probe.ok) {
+        const j: any = await probe.json();
+        sha = j.sha;
+      } else if (probe.status !== 404) {
+        // non-404 probe error → retry on 5xx otherwise give up
+        if (probe.status >= 500 && attempt < 3) { await new Promise(r => setTimeout(r, 1000)); continue; }
+        const txt = await probe.text();
+        console.error("GITHUB-PROBE", probe.status, txt);
+        return; // skip this file
+      }
+    }
+
+    const payload = sha ? { ...payloadBase, sha } : payloadBase;
+
     const res = await fetch(
       `https://api.github.com/repos/${notesRepo}/contents/${path}`,
       {
@@ -58,18 +79,26 @@ async function upsert(path: string, content: string, sha?: string) {
       }
     );
 
-    if (res.ok) return;                       // success
+    if (res.ok) return;               // success
 
-    // retry only on 5xx
+    // Retry logic
     if (res.status >= 500 && attempt < 3) {
       console.warn(`Retry ${attempt} for ${path} (status ${res.status})`);
-      await new Promise(r => setTimeout(r, 1000 * attempt)); // 1s, 2s
+      await new Promise(r => setTimeout(r, 1000 * attempt));
+      continue;
+    }
+
+    if (res.status === 422 && attempt < 3) {
+      // force a fresh sha next round
+      console.warn(`422 for ${path} – fetching sha and retrying`);
+      shaHint = undefined;
+      await new Promise(r => setTimeout(r, 1000));
       continue;
     }
 
     const txt = await res.text();
     console.error("GITHUB-ERROR", res.status, txt);
-    throw new Error(`GitHub ${res.status}`);
+    return; // don't crash the whole sync
   }
 }
 
