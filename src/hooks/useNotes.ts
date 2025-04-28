@@ -80,91 +80,56 @@ export function useNotes(itemId?: string) {
     }
   };
 
-  const updateNote = async (noteId: string, updates: Partial<{ title: string; content: string }>) => {
+  const updateNote = async (
+    noteId: string,
+    updates: Partial<{ title: string; content: string }>
+  ) {
+    // Skip if nothing changed
+    const note = notes.find(n => n.id === noteId);
+    if (!note) throw new Error('Note not found (local)');
+    if (
+      updates.title  === note.title  &&
+      updates.content === note.content
+    ) return true;
+
     try {
-      const silentNotFound = (err: any) =>
-        err?.code === 'PGRST116' || /0 rows/i.test(err?.details || '');
-        
-      // Find the current note to compare if content actually changed
-      const currentNote = notes.find(note => note.id === noteId);
-      if (!currentNote) throw new Error('Note not found');
-
-      // Early return if content hasn't changed
-      if (updates.content !== undefined && updates.content === currentNote.content) {
-        return true;
-      }
-
-      // Update the note
-      const { error } = await supabase
+      // → ONE round-trip does the update *and* returns the notebook id
+      const { data, error } = await supabase
         .from('notes')
         .update(updates)
-        .eq('id', noteId);
+        .eq('id', noteId)
+        .select(`
+          item_id, 
+          items!inner (
+            section_id, 
+            sections!inner (
+              notebook_id
+            )
+          )
+        `)
+        .single();
 
       if (error) throw error;
-      
-      // Update local state immediately after successful save
-      setNotes(prev =>
-        prev.map(n =>
-          n.id === noteId ? { ...n, ...updates } as Note : n
-        )
-      );
-      
-      // Try to update metadata, but continue if "not found" errors occur
-      try {
-        // Get the item_id for this note
-        const { data: noteData, error: noteError } = await supabase
-          .from('notes')
-          .select('item_id')
-          .eq('id', noteId)
-          .single();
-        
-        if (noteError) {
-          if (silentNotFound(noteError)) {
-            return true; // Note was deleted, but we already updated local state
-          }
-          throw noteError;
-        }
-        
-        // Get the section_id from the item
-        const { data: itemData, error: itemError } = await supabase
-          .from('items')
-          .select('section_id')
-          .eq('id', noteData.item_id)
-          .single();
-        
-        if (itemError) {
-          if (silentNotFound(itemError)) {
-            return true; // Item was deleted, but we already updated local state
-          }
-          throw itemError;
-        }
-        
-        // Get the notebook_id from the section
-        const { data: sectionData, error: sectionError } = await supabase
-          .from('sections')
-          .select('notebook_id')
-          .eq('id', itemData.section_id)
-          .single();
-        
-        if (sectionError) {
-          if (silentNotFound(sectionError)) {
-            return true; // Section was deleted, but we already updated local state
-          }
-          throw sectionError;
-        }
-        
-        // Update the notebook's last_modified timestamp
-        const { error: notebookError } = await supabase
-          .from('notebooks')
-          .update({ last_modified: new Date().toISOString() })
-          .eq('id', sectionData.notebook_id);
-        
-        if (notebookError) throw notebookError;
-      } catch (metadataError) {
-        console.error('Error updating metadata:', metadataError);
-        // Don't throw here, as the main note update was successful
-      }
-      
+
+      // Extract notebook ID
+      type ResponseData = {
+        items: {
+          sections: {
+            notebook_id: string;
+          };
+        };
+      };
+      const responseData = data as unknown as ResponseData;
+      const notebookId = responseData.items.sections.notebook_id;
+
+      // bump notebook timestamp
+      await supabase
+        .from('notebooks')
+        .update({ last_modified: new Date().toISOString() })
+        .eq('id', notebookId);
+
+      // optimistic UI
+      setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, ...updates } : n)));
       return true;
     } catch (error) {
       handleError(error as Error);

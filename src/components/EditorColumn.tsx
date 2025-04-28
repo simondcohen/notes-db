@@ -48,6 +48,8 @@ export function EditorColumn({
     debounce((id: string, html: string) => onUpdateContent(id, html), 600)
   ).current;
 
+  useEffect(() => () => debouncedSave.cancel(), []);
+
   useEffect(() => setDraftContent(activeNote?.content || ''), [activeNote?.id]);
 
   const handleDeleteNote = async (noteId: string, noteTitle: string) => {
