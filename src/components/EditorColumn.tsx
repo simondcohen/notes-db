@@ -45,15 +45,7 @@ export function EditorColumn({
   const [draftContent, setDraftContent] = useState('');
 
   const debouncedSave = useRef(
-    debounce((id: string, html: string) => {
-      // Check if the note still exists in our notes array
-      const noteStillExists = notes.some(note => note.id === id);
-      if (noteStillExists) {
-        onUpdateContent(id, html);
-      } else {
-        console.log('Note no longer exists, skipping save');
-      }
-    }, 600)
+    debounce((id: string, html: string) => onUpdateContent(id, html), 600)
   ).current;
 
   useEffect(() => setDraftContent(activeNote?.content || ''), [activeNote?.id]);
