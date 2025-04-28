@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Plus, X, Tag } from 'lucide-react';
 import type { Note } from '../types';
@@ -7,6 +7,7 @@ import { RichTextEditor } from './RichTextEditor';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from './ui/command';
 import { useTags } from '../hooks/useTags';
 import { DeleteNoteDialog } from './DeleteNoteDialog';
+import debounce from 'lodash.debounce';
 
 interface EditorColumnProps {
   notes: Note[];
@@ -41,6 +42,13 @@ export function EditorColumn({
   const location = useLocation();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [draftContent, setDraftContent] = useState('');
+
+  const debouncedSave = useRef(
+    debounce((id: string, html: string) => onUpdateContent(id, html), 600)
+  ).current;
+
+  useEffect(() => setDraftContent(activeNote?.content || ''), [activeNote?.id]);
 
   const handleDeleteNote = async (noteId: string, noteTitle: string) => {
     setNoteToDelete({ id: noteId, title: noteTitle });
@@ -197,8 +205,11 @@ export function EditorColumn({
 
             <div className="flex-1 overflow-y-auto">
               <RichTextEditor
-                content={activeNote.content}
-                onChange={(content) => onUpdateContent(activeNote.id, content)}
+                content={draftContent}
+                onChange={(content) => {
+                  setDraftContent(content);      // instant UI update
+                  if (activeNote) debouncedSave(activeNote.id, content); // background save
+                }}
               />
             </div>
           </>

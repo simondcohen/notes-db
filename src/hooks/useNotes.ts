@@ -82,6 +82,15 @@ export function useNotes(itemId?: string) {
 
   const updateNote = async (noteId: string, updates: Partial<{ title: string; content: string }>) => {
     try {
+      // Find the current note to compare if content actually changed
+      const currentNote = notes.find(note => note.id === noteId);
+      if (!currentNote) throw new Error('Note not found');
+
+      // Early return if content hasn't changed
+      if (updates.content !== undefined && updates.content === currentNote.content) {
+        return true;
+      }
+
       // Update the note
       const { error } = await supabase
         .from('notes')
