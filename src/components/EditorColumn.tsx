@@ -51,6 +51,12 @@ export function EditorColumn({
   useEffect(() => () => debouncedSave.cancel(), []);
 
   useEffect(() => {
+    const flushOnUnload = () => debouncedSave.flush();
+    window.addEventListener('beforeunload', flushOnUnload);
+    return () => window.removeEventListener('beforeunload', flushOnUnload);
+  }, []);
+
+  useEffect(() => {
     // cancel any queued save when we switch to a different note
     debouncedSave.cancel();
   }, [activeNote?.id]);

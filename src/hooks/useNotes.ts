@@ -84,18 +84,13 @@ export function useNotes(itemId?: string) {
     noteId: string,
     updates: Partial<{ title: string; content: string }>
   ) => {
-    // 1. Skip server work if nothing changed
-    const current = notes.find(n => n.id === noteId);
-    if (!current) throw new Error('Note not found (local)');
-    if (
-      updates.title  === current.title &&
-      updates.content === current.content
-    ) return true;
+    /* ---------- optimistic UI first ---------- */
+    setNotes(prev =>
+      prev.map(n => (n.id === noteId ? { ...n, ...updates, lastModified: new Date() } : n))
+    );
 
     try {
-      /* ---------- ONE request to notes --------------- */
-      // – updates the row
-      // – returns item_id so we can chase the hierarchy
+      /* ---------- 1. update the note + get item_id ---------- */
       const { data: noteRow, error: noteErr } = await supabase
         .from('notes')
         .update({ ...updates, updated_at: new Date().toISOString() })
@@ -104,34 +99,34 @@ export function useNotes(itemId?: string) {
         .single();
       if (noteErr) throw noteErr;
 
-      /* ---------- Second request: item → section_id ---- */
-      const { data: itemRow, error: itemErr } = await supabase
+      /* ---------- 2. item → section_id (may be missing) ----- */
+      const { data: itemRow } = await supabase
         .from('items')
         .select('section_id')
         .eq('id', noteRow.item_id)
-        .single();
-      if (itemErr) throw itemErr;
+        .maybeSingle();           // returns null if item was deleted
 
-      /* ---------- Third request: section → notebook_id -- */
-      const { data: sectRow, error: sectErr } = await supabase
-        .from('sections')
-        .select('notebook_id')
-        .eq('id', itemRow.section_id)
-        .single();
-      if (sectErr) throw sectErr;
+      /* ---------- 3. section → notebook_id (may be missing) - */
+      if (itemRow?.section_id) {
+        const { data: sectionRow } = await supabase
+          .from('sections')
+          .select('notebook_id')
+          .eq('id', itemRow.section_id)
+          .maybeSingle();
 
-      /* ---------- Final request: bump notebook timestamp - */
-      await supabase
-        .from('notebooks')
-        .update({ last_modified: new Date().toISOString() })
-        .eq('id', sectRow.notebook_id);
+        /* ---------- 4. bump notebook timestamp -------------- */
+        if (sectionRow?.notebook_id) {
+          await supabase
+            .from('notebooks')
+            .update({ last_modified: new Date().toISOString() })
+            .eq('id', sectionRow.notebook_id);
+        }
+      }
 
-      /* ---------- Optimistic UI ------------------------ */
-      setNotes(prev =>
-        prev.map(n => (n.id === noteId ? { ...n, ...updates } : n))
-      );
-      return true;
+      return true;                // success
     } catch (err) {
+      console.error('Error saving note:', err);
+      await refresh();            // rollback optimistic UI with fresh data
       handleError(err as Error);
       return false;
     }
