@@ -84,10 +84,17 @@ export function useNotes(itemId?: string) {
     try {
       // Find the current note to compare if content actually changed
       const currentNote = notes.find(note => note.id === noteId);
-      if (!currentNote) throw new Error('Note not found');
-
-      // Early return if content hasn't changed
-      if (updates.content !== undefined && updates.content === currentNote.content) {
+      
+      // If note not found locally, proceed with update anyway (it might exist in DB)
+      // or skip if it's just a content update that might be stale
+      if (!currentNote) {
+        if (updates.content !== undefined && !updates.title) {
+          console.log('Note not found in local state, skipping content update');
+          return true;
+        }
+        // Otherwise continue with update (for title changes or other operations)
+      } else if (updates.content !== undefined && updates.content === currentNote.content) {
+        // Early return if content hasn't changed
         return true;
       }
 
