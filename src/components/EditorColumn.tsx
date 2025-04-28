@@ -50,6 +50,11 @@ export function EditorColumn({
 
   useEffect(() => () => debouncedSave.cancel(), []);
 
+  useEffect(() => {
+    // cancel any queued save when we switch to a different note
+    debouncedSave.cancel();
+  }, [activeNote?.id]);
+
   useEffect(() => setDraftContent(activeNote?.content || ''), [activeNote?.id]);
 
   const handleDeleteNote = async (noteId: string, noteTitle: string) => {
