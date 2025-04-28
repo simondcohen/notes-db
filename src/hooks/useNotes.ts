@@ -82,19 +82,15 @@ export function useNotes(itemId?: string) {
 
   const updateNote = async (noteId: string, updates: Partial<{ title: string; content: string }>) => {
     try {
+      const silentNotFound = (err: any) =>
+        err?.code === 'PGRST116' || /0 rows/i.test(err?.details || '');
+        
       // Find the current note to compare if content actually changed
       const currentNote = notes.find(note => note.id === noteId);
-      
-      // If note not found locally, proceed with update anyway (it might exist in DB)
-      // or skip if it's just a content update that might be stale
-      if (!currentNote) {
-        if (updates.content !== undefined && !updates.title) {
-          console.log('Note not found in local state, skipping content update');
-          return true;
-        }
-        // Otherwise continue with update (for title changes or other operations)
-      } else if (updates.content !== undefined && updates.content === currentNote.content) {
-        // Early return if content hasn't changed
+      if (!currentNote) throw new Error('Note not found');
+
+      // Early return if content hasn't changed
+      if (updates.content !== undefined && updates.content === currentNote.content) {
         return true;
       }
 
@@ -113,31 +109,31 @@ export function useNotes(itemId?: string) {
         .eq('id', noteId)
         .single();
       
-      if (noteError) throw noteError;
+      if (noteError && !silentNotFound(noteError)) throw noteError;
       
       // Get the section_id from the item
       const { data: itemData, error: itemError } = await supabase
         .from('items')
         .select('section_id')
-        .eq('id', noteData.item_id)
+        .eq('id', noteData?.item_id)
         .single();
       
-      if (itemError) throw itemError;
+      if (itemError && !silentNotFound(itemError)) throw itemError;
       
       // Get the notebook_id from the section
       const { data: sectionData, error: sectionError } = await supabase
         .from('sections')
         .select('notebook_id')
-        .eq('id', itemData.section_id)
+        .eq('id', itemData?.section_id)
         .single();
       
-      if (sectionError) throw sectionError;
+      if (sectionError && !silentNotFound(sectionError)) throw sectionError;
       
       // Update the notebook's last_modified timestamp
       const { error: notebookError } = await supabase
         .from('notebooks')
         .update({ last_modified: new Date().toISOString() })
-        .eq('id', sectionData.notebook_id);
+        .eq('id', sectionData?.notebook_id);
       
       if (notebookError) throw notebookError;
       

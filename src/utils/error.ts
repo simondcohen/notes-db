@@ -8,6 +8,9 @@ export function handleError(error: Error | PostgrestError | null) {
   if ('code' in error && 'message' in error) {
     // Handle Supabase specific errors
     switch (error.code) {
+      case 'PGRST116':
+        // row count = 0 → harmless racing update
+        return;   // swallow it silently
       case '42501':
         alert('You do not have permission to perform this action.');
         break;
