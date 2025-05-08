@@ -301,29 +301,12 @@ export function FolderItem({
         <div className="pl-5 mt-1 border-l ml-3 border-gray-200">
           {/* Always show sections within this folder when open, regardless of selection state */}
           <div className="sections-container py-1">
-            {/* Show a label to indicate this is the expanded view */}
-            <div className="text-xs font-medium text-gray-400 mb-1 flex items-center">
-              <span className="mr-1">Contents</span>
-              <div className="h-px flex-grow bg-gray-200"></div>
-            </div>
-            
-            {/* Show a hint when not selected but expanded */}
-            {!isActive && (
-              <div className="bg-blue-50 text-xs p-1 rounded mb-2 text-blue-600 flex items-center">
-                <span className="mr-1">⚡</span> Quick view mode. <button onClick={handleSelect} className="text-blue-700 hover:underline ml-1">Open folder</button>
-              </div>
-            )}
-            
             {/* Directly render children (sections) without extra wrapping */}
             {children ? (
               <div className="folder-sections-wrapper">
                 {children}
               </div>
-            ) : (
-              <div className="text-xs text-gray-400 italic px-2 py-1">
-                No sections available in this folder
-              </div>
-            )}
+            ) : null}
 
             {/* Display items directly in this folder */}
             {itemsLoading && <div className="text-xs text-gray-400 px-2 py-1">Loading items...</div>}
@@ -344,11 +327,6 @@ export function FolderItem({
                   </div>
                 ))}
               </div>
-            )}
-            {folderItems && folderItems.length === 0 && !children && (
-               <div className="text-xs text-gray-400 italic px-2 py-1">
-                 This folder is empty.
-               </div>
             )}
           </div>
           

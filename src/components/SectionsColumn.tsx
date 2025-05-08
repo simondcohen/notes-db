@@ -213,15 +213,6 @@ export function SectionsColumn({
     <div className="w-64 h-full bg-gray-50 flex flex-col">
       <div className="h-14 px-4 border-b border-gray-200 flex items-center justify-between bg-white">
         <div className="flex items-center">
-          {selectedFolder && (
-            <button
-              onClick={() => onSelectFolder('')}
-              className="p-1 hover:bg-gray-200 rounded-lg mr-2"
-              title="Back to Root Level"
-            >
-              <ArrowLeft className="h-4 w-4 text-gray-600" />
-            </button>
-          )}
           <h2 className="font-semibold text-gray-700">
             Sections
           </h2>
@@ -236,11 +227,6 @@ export function SectionsColumn({
               >
                 <FolderPlusIcon className="h-5 w-5 text-gray-600" />
               </button>
-              {selectedFolder && (
-                <div className="text-xs text-gray-400 absolute -mt-5 right-12">
-                  Root
-                </div>
-              )}
             </>
           )}
           <button
@@ -298,9 +284,7 @@ export function SectionsColumn({
                           />
                         ))}
                       </div>
-                    ) : (
-                      <div className="text-xs text-gray-400 italic px-2 py-1">No sections in this folder</div>
-                    )}
+                    ) : null}
                   </FolderItem>
                 );
               })}
