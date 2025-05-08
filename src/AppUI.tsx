@@ -25,6 +25,7 @@ interface AppUIProps {
     sectionId: string;
     itemId: string;
     noteId: string;
+    skipFolderView?: boolean;
   };
 }
 
@@ -79,7 +80,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     reorderSections,
     moveToFolder,
     refresh: refreshSections,
-  } = useSections(selectedNotebook, selectedFolder);
+  } = useSections(selectedNotebook);
 
   const {
     items,
@@ -89,7 +90,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     deleteItem,
     reorderItems,
     moveToFolder: moveItemToFolder,
-  } = useItems(selectedSection, selectedFolder);
+  } = useItems(selectedSection);
 
   const {
     notes,
@@ -198,10 +199,17 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
 
       // If we've saved state **for this same notebook**, restore it
       if (persisted.selectedNotebook === urlNotebookId) {
+        // Only restore the folder selection if a section or item is also selected
+        // This prevents showing the subfolder view by default
+        if (persisted.selectedSection || persisted.selectedItem) {
+          setSelectedFolder(persisted.selectedFolder);
+        } else {
+          setSelectedFolder(undefined); // Don't default to folder view
+        }
+        
         setSelectedSection(persisted.selectedSection);
         setSelectedItem(persisted.selectedItem);
         setSelectedNote(persisted.selectedNote);
-        setSelectedFolder(persisted.selectedFolder);
       } else {
         // New notebook → start clean
         setSelectedSection(undefined);
@@ -214,13 +222,24 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
       setSelectedSection(initialNote.sectionId);
       setSelectedItem(initialNote.itemId);
       setSelectedNote(initialNote.noteId);
+      
+      // If the skipFolderView flag is present, or if we're opening a specific note,
+      // don't show the folder view
+      setSelectedFolder(undefined);
     } else {
       const persistedState = loadPersistedState(session.user.id);
       setSelectedNotebook(persistedState.selectedNotebook);
+      
+      // Only restore folder if section or item is also selected
+      if (persistedState.selectedSection || persistedState.selectedItem) {
+        setSelectedFolder(persistedState.selectedFolder);
+      } else {
+        setSelectedFolder(undefined);
+      }
+      
       setSelectedSection(persistedState.selectedSection);
       setSelectedItem(persistedState.selectedItem);
       setSelectedNote(persistedState.selectedNote);
-      setSelectedFolder(persistedState.selectedFolder);
     }
   }, [session.user.id, initialNote, urlNotebookId]);
 
@@ -372,6 +391,9 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
   const handleSearchResultSelect = (result: SearchResult) => {
     if (!result.sectionId) return;
     
+    // Clear any selected folder to prevent showing the subfolder view
+    setSelectedFolder(undefined);
+    
     // Always navigate to the selected section
     setSelectedSection(result.sectionId);
     
@@ -442,25 +464,28 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
   const handleSelectFolder = (folderId: string) => {
     console.log("AppUI: handleSelectFolder called with:", folderId);
     
-    // If empty string is passed, it means we're deselecting the folder
     if (folderId === '') {
       console.log("AppUI: Deselecting folder");
       setSelectedFolder(undefined);
+      // When deselecting a folder, we don't necessarily want to clear section selection
+      // User might be going from a folder view back to a root section view
     } else {
       console.log("AppUI: Selecting folder:", folderId);
       setSelectedFolder(folderId);
-      
-      // Trigger an immediate refresh of sections with the new folder ID
-      setTimeout(() => {
-        console.log("Forcing sections refresh for newly selected folder:", folderId);
-        refreshSections();
-      }, 100);
+      // When a folder is selected, clear section/item/note to focus on folder contents in SectionsColumn
+      setSelectedSection(undefined);
+      setSelectedItem(undefined);
+      setSelectedNote(undefined);
     }
     
-    // Reset other selections
-    setSelectedSection(undefined);
-    setSelectedItem(undefined);
-    setSelectedNote(undefined);
+    // Save persisted state
+    savePersistedState(session.user.id, {
+      selectedNotebook,
+      selectedSection: undefined, // Ensure this is cleared when a folder is selected
+      selectedItem: undefined,
+      selectedNote: undefined,
+      selectedFolder: folderId === '' ? undefined : folderId,
+    });
   };
 
   const handleMoveToFolder = async (sectionId: string, folderId: string | null) => {
@@ -478,11 +503,18 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     await moveItemToFolder(itemId, folderId);
   };
 
-  // Fix handleSectionSelect definition
+  // Centralized handler for selecting an item, whether from ItemsColumn or FolderItem
+  const handleSelectItem = (itemId: string) => {
+    setSelectedItem(itemId);
+    // Notes are handled by useNotes(selectedItem)
+  };
+
+  // Updated to use the new central handler
   const handleSectionSelect = (sectionId: string) => {
     setSelectedSection(sectionId);
-    setSelectedItem(undefined);
+    setSelectedItem(undefined); // Clear item when section changes
     setSelectedNote(undefined);
+    // selectedFolder remains as is, allowing a section within a folder to be active
   };
 
   // Fix handleDeleteSection definition
@@ -550,6 +582,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
             selectedFolder={selectedFolder}
             onSelectSection={handleSectionSelect}
             onSelectFolder={handleSelectFolder}
+            onSelectItem={handleSelectItem}
             onAddSection={handleAddSection}
             onAddFolder={handleAddFolder}
             onAddSubfolder={handleAddSubfolder}
@@ -568,13 +601,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
             items={items}
             folders={folders}
             selectedItem={selectedItem}
-            onSelectItem={(itemId) => {
-              setSelectedItem(itemId);
-              const item = items.find(i => i.id === itemId);
-              if (item?.notes && item.notes.length > 0) {
-                setSelectedNote(item.notes[0].id);
-              }
-            }}
+            onSelectItem={handleSelectItem}
             onAddItem={handleAddItem}
             onDeleteItem={deleteItem}
             onUpdateItemTitle={updateItemTitle}

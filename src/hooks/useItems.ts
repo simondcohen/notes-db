@@ -241,7 +241,29 @@ export function useItems(sectionId?: string, folderId?: string) {
     if (hasFolderColumn !== null) {
       refresh();
     }
-  }, [sectionId, folderId, hasFolderColumn]);
+
+    // Set up a subscription to refresh when items change in the database
+    const channel = supabase
+      .channel('item_changes') // Unique channel name
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', // Listen to all events: INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'items' 
+        },
+        (payload) => {
+          console.log('Change received for items table!', payload);
+          refresh(); // Re-fetch items
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on component unmount
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [sectionId, folderId, hasFolderColumn]); // Dependencies for initial refresh and subscription setup
 
   return {
     items,

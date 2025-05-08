@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Folder, FolderOpen, ChevronDown, ChevronRight, Trash2, FolderPlus } from 'lucide-react';
-import type { Folder as FolderType } from '../types';
+import { Folder, FolderOpen, ChevronDown, ChevronRight, Trash2, FolderPlus, FileText } from 'lucide-react';
+import type { Folder as FolderType, Item as ItemType } from '../types';
 import { supabase } from '../lib/supabase';
+import { useItems } from '../hooks/useItems';
 
 interface FolderItemProps {
   folder: FolderType;
   isActive: boolean;
   selectedFolder?: string;
+  selectedItem?: string;
   onSelect: (folderId: string) => void;
   onRename: (folderId: string, title: string) => void;
   onDelete: (folderId: string) => void;
   onAddSubfolder?: (parentFolderId: string) => void;
+  onSelectItem?: (itemId: string) => void;
   children?: React.ReactNode;
 }
 
@@ -130,10 +133,12 @@ export function FolderItem({
   folder,
   isActive,
   selectedFolder,
+  selectedItem,
   onSelect,
   onRename,
   onDelete,
   onAddSubfolder,
+  onSelectItem,
   children
 }: FolderItemProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -141,6 +146,16 @@ export function FolderItem({
   const [title, setTitle] = useState(folder.title);
   const [showOptions, setShowOptions] = useState(false);
   const refreshRequestedRef = useRef(false);
+  const hasChildrenRef = useRef<boolean>(false);
+  
+  // Get items directly within this folder
+  const { items: folderItems, loading: itemsLoading, refresh: refreshFolderItems } = useItems(undefined, folder.id);
+
+  // Check if there are children when the component renders
+  useEffect(() => {
+    hasChildrenRef.current = Boolean(children);
+    console.log(`Folder ${folder.title} has children: ${hasChildrenRef.current}`);
+  }, [children, folder.title]);
   
   // Get subfolders for this folder
   const { subfolders, refresh: refreshSubfolders } = useSubfolders(folder.id);
@@ -157,16 +172,18 @@ export function FolderItem({
     if (isOpen && !refreshRequestedRef.current) {
       refreshRequestedRef.current = true;
       refreshSubfolders();
+      refreshFolderItems();
       // Reset the flag after a delay
       setTimeout(() => {
         refreshRequestedRef.current = false;
       }, 1000);
     }
-  }, [isOpen, refreshSubfolders]);
+  }, [isOpen, refreshSubfolders, refreshFolderItems]);
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsOpen(!isOpen);
+    console.log(`Toggled folder ${folder.title} to ${!isOpen ? 'open' : 'closed'}`);
   };
 
   const handleSelect = () => {
@@ -282,14 +299,66 @@ export function FolderItem({
       
       {isOpen && (
         <div className="pl-5 mt-1 border-l ml-3 border-gray-200">
-          {/* Display children (sections within this folder) */}
+          {/* Always show sections within this folder when open, regardless of selection state */}
           <div className="sections-container py-1">
-            {children}
+            {/* Show a label to indicate this is the expanded view */}
+            <div className="text-xs font-medium text-gray-400 mb-1 flex items-center">
+              <span className="mr-1">Contents</span>
+              <div className="h-px flex-grow bg-gray-200"></div>
+            </div>
+            
+            {/* Show a hint when not selected but expanded */}
+            {!isActive && (
+              <div className="bg-blue-50 text-xs p-1 rounded mb-2 text-blue-600 flex items-center">
+                <span className="mr-1">⚡</span> Quick view mode. <button onClick={handleSelect} className="text-blue-700 hover:underline ml-1">Open folder</button>
+              </div>
+            )}
+            
+            {/* Directly render children (sections) without extra wrapping */}
+            {children ? (
+              <div className="folder-sections-wrapper">
+                {children}
+              </div>
+            ) : (
+              <div className="text-xs text-gray-400 italic px-2 py-1">
+                No sections available in this folder
+              </div>
+            )}
+
+            {/* Display items directly in this folder */}
+            {itemsLoading && <div className="text-xs text-gray-400 px-2 py-1">Loading items...</div>}
+            {folderItems && folderItems.length > 0 && (
+              <div className="folder-direct-items-container pt-1 mt-2 border-t border-gray-200">
+                <div className="text-xs font-medium text-gray-400 mb-1 flex items-center mt-1">
+                  <span className="mr-1">Items in this folder</span>
+                  <div className="h-px flex-grow bg-gray-200"></div>
+                </div>
+                {folderItems.map(item => (
+                  <div 
+                    key={item.id} 
+                    className={`flex items-center p-1 text-sm rounded-md cursor-pointer ${selectedItem === item.id ? 'bg-blue-100 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-100'}`}
+                    onClick={() => onSelectItem && onSelectItem(item.id)}
+                  >
+                    <FileText className="w-4 h-4 mr-2 ${selectedItem === item.id ? 'text-blue-600' : 'text-blue-500'}" />
+                    <span className="truncate">{item.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {folderItems && folderItems.length === 0 && !children && (
+               <div className="text-xs text-gray-400 italic px-2 py-1">
+                 This folder is empty.
+               </div>
+            )}
           </div>
           
           {/* Display subfolders */}
           {subfolders.length > 0 && (
             <div className="subfolders-container pt-1">
+              <div className="text-xs font-medium text-gray-400 mb-1 flex items-center">
+                <span className="mr-1">Subfolders</span>
+                <div className="h-px flex-grow bg-gray-200"></div>
+              </div>
               {subfolders.map(subfolder => (
                 <FolderItem
                   key={subfolder.id}
@@ -300,6 +369,8 @@ export function FolderItem({
                   onRename={onRename}
                   onDelete={onDelete}
                   onAddSubfolder={onAddSubfolder}
+                  selectedItem={selectedItem}
+                  onSelectItem={onSelectItem}
                 />
               ))}
             </div>

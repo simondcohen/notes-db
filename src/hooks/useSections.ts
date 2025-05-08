@@ -40,35 +40,20 @@ export function useSections(notebookId?: string, folderId?: string) {
       setLoading(true);
       let query = supabase
         .from('sections')
-        .select('id, title, position, folder_id, items ( id, title, position )');
+        .select('id, title, position, folder_id, items ( id, title, position )')
+        .eq('notebook_id', notebookId);
       
-      // Only apply folder filtering if the folder_id column exists
-      if (hasFolderColumn) {
-        if (folderId) {
-          // If folder ID is provided, get sections in that specific folder
-          // Important: Just query for the exact folder_id, don't try to fetch sections for other folders
-          console.log("Querying for sections with exact folder_id:", folderId);
-          query = query.eq('folder_id', folderId);
-        } else {
-          // Otherwise get all sections for the notebook that are not in folders
-          // This ensures we only see top-level sections when no folder is selected
-          console.log("Querying for top-level sections in notebook:", notebookId);
-          query = query.eq('notebook_id', notebookId).is('folder_id', null);
-        }
-      } else {
-        // If folder_id column doesn't exist yet, just get all sections for the notebook
-        query = query.eq('notebook_id', notebookId);
-      }
-      
-      console.log("Final section query parameters:", 
-        folderId ? `folder_id=${folderId}` : `notebook_id=${notebookId} AND folder_id IS NULL`
-      );
+      // The folderId parameter to the hook will no longer filter the main list of sections.
+      // SectionsColumn will handle displaying the hierarchy.
+      // We retain the folderId parameter for the hook as addSection uses it.
+
+      console.log(`Fetching all sections for notebook: ${notebookId}`);
 
       const { data, error } = await query.order('position', { ascending: true });
 
       if (error) throw error;
 
-      console.log(`Loaded ${data?.length || 0} sections for ${folderId ? `folder ${folderId}` : `notebook ${notebookId}`}`);
+      console.log(`Loaded ${data?.length || 0} sections for notebook ${notebookId}`);
       if (data && data.length > 0) {
         console.log("Section data:", data);
       }
@@ -275,12 +260,12 @@ export function useSections(notebookId?: string, folderId?: string) {
 
   useEffect(() => {
     if (hasFolderColumn !== null) {
-      console.log("useSections: refreshing with notebookId:", notebookId, "folderId:", folderId);
+      console.log("useSections: refreshing with notebookId:", notebookId, "(folderId parameter is no longer used for filtering main list)");
       refresh();
     }
-  }, [notebookId, folderId, hasFolderColumn]);
+  }, [notebookId, hasFolderColumn]); // Remove folderId from dependencies for refresh, as it doesn't filter the list anymore
 
-  // Monitor selectedFolder changes
+  // Monitor selectedFolder changes (folderId prop of the hook)
   useEffect(() => {
     if (folderId) {
       console.log("useSections: folder ID changed to:", folderId);

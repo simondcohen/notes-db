@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, FolderPlusIcon, ArrowLeft } from 'lucide-react';
 import {
   DndContext,
@@ -27,8 +27,10 @@ interface SectionsColumnProps {
   folders: Folder[];
   selectedSection?: string;
   selectedFolder?: string;
+  selectedItem?: string;
   onSelectSection: (sectionId: string) => void;
   onSelectFolder: (folderId: string) => void;
+  onSelectItem?: (itemId: string) => void;
   onAddSection: (folderId?: string) => void;
   onAddFolder: () => void;
   onAddSubfolder: (parentFolderId: string) => void;
@@ -48,8 +50,10 @@ export function SectionsColumn({
   folders,
   selectedSection,
   selectedFolder,
+  selectedItem,
   onSelectSection,
   onSelectFolder,
+  onSelectItem,
   onAddSection,
   onAddFolder,
   onAddSubfolder,
@@ -69,6 +73,10 @@ export function SectionsColumn({
   const [contextMenuTargetId, setContextMenuTargetId] = useState<string | null>(null);
   const [contextMenuType, setContextMenuType] = useState<'section' | 'folder'>('section');
   const [currentFolderName, setCurrentFolderName] = useState('Folder');
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  
+  // Store a reference to sections to avoid repeated filtering
+  const sectionsRef = useRef<Map<string, Section[]>>(new Map());
   
   // Effect to find the current folder name when selectedFolder changes
   useEffect(() => {
@@ -85,10 +93,24 @@ export function SectionsColumn({
     }
 
     // If not found in root folders, we'll just use a generic name
-    // In a real implementation, you'd want to do a proper recursive search or
-    // keep a flattened map of all folders including subfolders
     setCurrentFolderName('Subfolder');
   }, [selectedFolder, folders]);
+
+  // Effect to organize sections by folder
+  useEffect(() => {
+    const sectionsByFolder = new Map<string, Section[]>();
+    
+    // Group sections by folder
+    sections.forEach(section => {
+      const folderId = section.folderId || 'root';
+      if (!sectionsByFolder.has(folderId)) {
+        sectionsByFolder.set(folderId, []);
+      }
+      sectionsByFolder.get(folderId)?.push(section);
+    });
+    
+    sectionsRef.current = sectionsByFolder;
+  }, [sections]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -175,18 +197,16 @@ export function SectionsColumn({
 
   // Add a helper function to handle adding a section
   const handleAddSectionClick = () => {
-    // Log current selected folder
-    console.log("Current selected folder:", selectedFolder);
-    
-    // Make sure this value is passed to the parent
-    if (selectedFolder) {
-      console.log("Adding section to specific folder:", selectedFolder);
-    } else {
-      console.log("Adding section to root level");
-    }
-    
     // Call the parent function with the current selected folder
     onAddSection(selectedFolder);
+  };
+
+  // Get sections for a specific folder
+  const getFolderSections = (folderId: string) => {
+    console.log(`Getting sections for folder ${folderId}`);
+    const folderSections = sections.filter(section => section.folderId === folderId);
+    console.log(`Found ${folderSections.length} sections for folder ${folderId}`);
+    return folderSections;
   };
 
   return (
@@ -203,9 +223,7 @@ export function SectionsColumn({
             </button>
           )}
           <h2 className="font-semibold text-gray-700">
-            {selectedFolder 
-              ? `${currentFolderName} Sections` 
-              : 'Sections'}
+            Sections
           </h2>
         </div>
         <div className="flex">
@@ -246,9 +264,9 @@ export function SectionsColumn({
           {hasFolderSupport && folders.length > 0 && (
             <div className="mt-2 space-y-1">
               {folders.map((folder) => {
-                // Log which sections belong to this folder
-                const folderSections = sections.filter(section => section.folderId === folder.id);
-                console.log(`Sections for folder ${folder.title} (${folder.id}):`, folderSections);
+                // Get sections for this folder
+                const folderSections = getFolderSections(folder.id);
+                console.log(`Rendering folder ${folder.title} with ${folderSections.length} sections`);
                 
                 return (
                   <FolderItem
@@ -260,11 +278,12 @@ export function SectionsColumn({
                     onRename={onUpdateFolderTitle}
                     onDelete={(folderId) => handleDeleteFolder(folderId, folder.title)}
                     onAddSubfolder={onAddSubfolder}
+                    selectedItem={selectedItem}
+                    onSelectItem={onSelectItem}
                   >
-                    {/* Show sections in this folder */}
-                    {selectedFolder === folder.id && (
-                      <div className="section-container mt-1 space-y-0.5">
-                        {folderSections.length > 0 && folderSections.map(section => (
+                    {folderSections.length > 0 ? (
+                      <div className="folder-sections">
+                        {folderSections.map(section => (
                           <DraggableSectionItem
                             key={section.id}
                             section={section}
@@ -274,9 +293,13 @@ export function SectionsColumn({
                             onUpdateTitle={onUpdateSectionTitle}
                             onExport={handleExportSection}
                             onContextMenu={(e) => handleContextMenu(e, section.id, 'section')}
+                            onMoveToFolder={onMoveToFolder}
+                            folders={folders}
                           />
                         ))}
                       </div>
+                    ) : (
+                      <div className="text-xs text-gray-400 italic px-2 py-1">No sections in this folder</div>
                     )}
                   </FolderItem>
                 );
@@ -305,6 +328,8 @@ export function SectionsColumn({
                         onUpdateTitle={onUpdateSectionTitle}
                         onExport={handleExportSection}
                         onContextMenu={hasFolderSupport ? (e) => handleContextMenu(e, section.id, 'section') : undefined}
+                        onMoveToFolder={onMoveToFolder}
+                        folders={folders}
                       />
                     ))}
                 </div>

@@ -132,6 +132,8 @@ export function ItemsColumn({
                   onDelete={(itemId) => handleDeleteItem(itemId, item.title)}
                   onUpdateTitle={onUpdateItemTitle}
                   onContextMenu={hasFolderSupport ? (e) => handleContextMenu(e, item.id) : undefined}
+                  onMoveToFolder={onMoveItemToFolder}
+                  folders={folders}
                 />
               ))}
             </SortableContext>

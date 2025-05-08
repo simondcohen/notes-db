@@ -25,7 +25,8 @@ export function TagNotesView() {
           sectionId: note.sectionId,
           subsectionId: note.subsectionId,
           itemId: note.itemId,
-          noteId: note.id
+          noteId: note.id,
+          skipFolderView: true
         }
       }
     });

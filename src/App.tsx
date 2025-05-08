@@ -18,10 +18,11 @@ function RouteStateManager() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Save current path to localStorage
     localStorage.setItem('lastPath', location.pathname + location.search);
   }, [location.pathname, location.search]);
 
-  // Remove the auto-redirection to last path
+  // Remove the comment to enable auto-redirection (now handled elsewhere)
   return null;
 }
 
@@ -58,13 +59,20 @@ function NotebookRouter({ session }: { session: Session }) {
   // Otherwise, we'll render the notebook selection view
   const { notebookId } = useParams<{notebookId?: string}>();
   
+  // If we're at the root path but have a note to open, navigate to the notebook
   if (location.pathname === '/' && noteToOpen) {
-    // If we're at the root path but have a note to open, navigate to the notebook
     return <Navigate to={`/nb/${noteToOpen.notebookId}`} state={{ noteToOpen }} replace />;
   }
   
-  // If we're at the root with no notebookId, show the selection screen
+  // If we're at the root with no notebookId, try to use last saved path first
   if (location.pathname === '/') {
+    const lastPath = localStorage.getItem('lastPath');
+    // If we have a last path that's not the root and not just a notebook selection path
+    if (lastPath && lastPath !== '/' && !lastPath.startsWith('/?') && lastPath.includes('/nb/')) {
+      return <Navigate to={lastPath} replace />;
+    }
+    
+    // Otherwise show the notebook selection
     return (
       <NotebookSelectionView 
         notebooks={notebooks || []} 
