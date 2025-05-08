@@ -1,5 +1,5 @@
-import React from 'react';
-import { Plus } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, FolderIcon } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -16,28 +16,38 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
-import type { Item } from '../types';
+import type { Item, Folder } from '../types';
 import { DraggableItem } from './DraggableItem';
 
 interface ItemsColumnProps {
   items: Item[];
+  folders?: Folder[];
   selectedItem?: string;
   onSelectItem: (itemId: string) => void;
   onAddItem: () => void;
   onDeleteItem: (itemId: string) => void;
   onUpdateItemTitle: (itemId: string, newTitle: string) => void;
   onReorderItems: (items: Item[]) => void;
+  onMoveItemToFolder?: (itemId: string, folderId: string | null) => void;
+  hasFolderSupport?: boolean;
 }
 
 export function ItemsColumn({
   items = [],
+  folders = [],
   selectedItem,
   onSelectItem,
   onAddItem,
   onDeleteItem,
   onUpdateItemTitle,
   onReorderItems,
+  onMoveItemToFolder,
+  hasFolderSupport = false,
 }: ItemsColumnProps) {
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [contextMenuTargetId, setContextMenuTargetId] = useState<string | null>(null);
+  
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -61,6 +71,32 @@ export function ItemsColumn({
       onReorderItems(arrayMove(items, oldIndex, newIndex));
     }
   };
+  
+  const handleContextMenu = (
+    e: React.MouseEvent, 
+    itemId: string
+  ) => {
+    if (!hasFolderSupport || !onMoveItemToFolder) return;
+    
+    e.preventDefault();
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    setContextMenuTargetId(itemId);
+    setShowContextMenu(true);
+  };
+
+  const handleMoveToFolder = (folderId: string | null) => {
+    if (contextMenuTargetId && onMoveItemToFolder) {
+      onMoveItemToFolder(contextMenuTargetId, folderId);
+      setShowContextMenu(false);
+    }
+  };
+
+  // Close the context menu when clicking anywhere else
+  React.useEffect(() => {
+    const handleClick = () => setShowContextMenu(false);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
 
   return (
     <div className="w-72 h-full bg-white flex flex-col">
@@ -95,6 +131,7 @@ export function ItemsColumn({
                   onSelect={onSelectItem}
                   onDelete={(itemId) => handleDeleteItem(itemId, item.title)}
                   onUpdateTitle={onUpdateItemTitle}
+                  onContextMenu={hasFolderSupport ? (e) => handleContextMenu(e, item.id) : undefined}
                 />
               ))}
             </SortableContext>
@@ -111,6 +148,31 @@ export function ItemsColumn({
           </div>
         )}
       </div>
+      
+      {/* Context menu for moving items to folders */}
+      {hasFolderSupport && showContextMenu && (
+        <div 
+          className="absolute bg-white shadow-lg rounded-md z-50 py-1"
+          style={{ top: contextMenuPosition.y, left: contextMenuPosition.x }}
+        >
+          <div className="text-sm px-3 py-1 font-semibold text-gray-700 border-b">Move to folder</div>
+          <div 
+            className="px-3 py-1 hover:bg-gray-100 cursor-pointer text-sm"
+            onClick={() => handleMoveToFolder(null)}
+          >
+            Root level (no folder)
+          </div>
+          {folders.map(folder => (
+            <div 
+              key={folder.id}
+              className="px-3 py-1 hover:bg-gray-100 cursor-pointer text-sm"
+              onClick={() => handleMoveToFolder(folder.id)}
+            >
+              {folder.title}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

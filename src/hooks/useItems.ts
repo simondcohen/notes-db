@@ -3,26 +3,67 @@ import { supabase } from '../lib/supabase';
 import { handleError } from '../utils/error';
 import type { Item } from '../types';
 
-export function useItems(sectionId?: string) {
+export function useItems(sectionId?: string, folderId?: string) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasFolderColumn, setHasFolderColumn] = useState<boolean | null>(null);
+
+  // Check if folder_id column exists in items table
+  const checkFolderColumnExists = async () => {
+    try {
+      // Try to fetch an item with a folder_id check to see if the column exists
+      await supabase
+        .from('items')
+        .select('id')
+        .is('folder_id', null)
+        .limit(1);
+      
+      setHasFolderColumn(true);
+    } catch (error) {
+      // If this errors, the folder_id column doesn't exist yet
+      console.log("folder_id column doesn't exist yet in items table");
+      setHasFolderColumn(false);
+    }
+  };
+
+  useEffect(() => {
+    checkFolderColumnExists();
+  }, []);
 
   const refresh = async () => {
-    if (!sectionId) {
+    // If neither sectionId nor folderId is provided, reset items
+    if (!sectionId && !folderId) {
       setItems([]);
       return;
     }
     
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('items')
-        .select('id, title, position')
-        .eq('section_id', sectionId)
-        .order('position', { ascending: true });
+      const query = supabase.from('items').select('id, title, position');
+      
+      // Only filter by folder if the folder_id column exists
+      if (sectionId) {
+        query.eq('section_id', sectionId);
+      } else if (folderId && hasFolderColumn) {
+        query.eq('folder_id', folderId);
+      } else if (!sectionId && !hasFolderColumn) {
+        // If no section ID and folder column doesn't exist, we can't load any items
+        setItems([]);
+        setLoading(false);
+        return;
+      }
+      
+      const { data, error } = await query.order('position', { ascending: true });
 
       if (error) throw error;
-      setItems(data?.map(item => ({ ...item, notes: [] })) || []);
+
+      const processedItems = data?.map(item => ({
+        id: item.id,
+        title: item.title,
+        notes: []
+      })) || [];
+
+      setItems(processedItems);
     } catch (error) {
       console.error('Error loading items:', error);
       handleError(error as Error);
@@ -31,41 +72,57 @@ export function useItems(sectionId?: string) {
     }
   };
 
-  useEffect(() => {
-    refresh();
-  }, [sectionId]);
-
-  const addItem = async (title: string) => {
-    if (!sectionId) return null;
+  const addItem = async (userId: string, title: string = 'New Item', specificFolderId?: string) => {
+    // Use the specific folder ID if provided, otherwise use the hook-level folder ID
+    const effectiveFolderId = specificFolderId || folderId;
     
-    try {
-      // First get the current user
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error('User must be authenticated to create items');
-      const userId = session.user.id;
+    // If we're trying to add to a folder but the column doesn't exist yet, fail
+    if (effectiveFolderId && !hasFolderColumn) {
+      console.warn("Cannot add item to folder: folder_id column doesn't exist yet");
+      return null;
+    }
 
-      const { data: existingItems } = await supabase
+    // At least one of sectionId or effectiveFolderId must be provided
+    if (!sectionId && !(effectiveFolderId && hasFolderColumn)) return null;
+
+    try {
+      // Get max position for the current context
+      const positionQuery = supabase
         .from('items')
         .select('position')
-        .eq('section_id', sectionId)
         .order('position', { ascending: false })
         .limit(1);
-
+      
+      if (sectionId && !effectiveFolderId) {
+        positionQuery.eq('section_id', sectionId);
+      } else if (effectiveFolderId && hasFolderColumn) {
+        positionQuery.eq('folder_id', effectiveFolderId);
+      }
+      
+      const { data: existingItems } = await positionQuery;
       const position = (existingItems?.[0]?.position ?? -1) + 1;
 
-      const { data: newItem, error: itemError } = await supabase
+      // Create insert data
+      const insertData: any = {
+        title,
+        position,
+        user_id: userId
+      };
+      
+      if (sectionId && !effectiveFolderId) {
+        insertData.section_id = sectionId;
+      } else if (effectiveFolderId && hasFolderColumn) {
+        insertData.folder_id = effectiveFolderId;
+      }
+
+      const { data: newItem, error } = await supabase
         .from('items')
-        .insert({
-          title,
-          section_id: sectionId,
-          position,
-          user_id: userId
-        })
+        .insert(insertData)
         .select()
         .single();
 
-      if (itemError) throw itemError;
-
+      if (error) throw error;
+      
       // Create a default note for the new item
       const { data: newNote, error: noteError } = await supabase
         .from('notes')
@@ -77,11 +134,23 @@ export function useItems(sectionId?: string) {
         })
         .select()
         .single();
-
+        
       if (noteError) throw noteError;
 
       await refresh();
-      return { ...newItem, notes: [newNote] };
+      
+      // Return the new item with its note
+      return {
+        id: newItem.id,
+        title: newItem.title,
+        notes: [{
+          id: newNote.id,
+          title: newNote.title,
+          content: newNote.content,
+          tags: [],
+          lastModified: new Date(newNote.updated_at || newNote.created_at)
+        }]
+      };
     } catch (error) {
       handleError(error as Error);
       return null;
@@ -93,6 +162,36 @@ export function useItems(sectionId?: string) {
       const { error } = await supabase
         .from('items')
         .update({ title })
+        .eq('id', itemId);
+
+      if (error) throw error;
+      await refresh();
+      return true;
+    } catch (error) {
+      handleError(error as Error);
+      return false;
+    }
+  };
+
+  const moveToFolder = async (itemId: string, targetFolderId: string | null) => {
+    if (!hasFolderColumn) {
+      console.warn("Cannot move to folder: folder_id column doesn't exist yet");
+      return false;
+    }
+
+    try {
+      const updateData: any = { folder_id: targetFolderId };
+      
+      // Clear other parent fields when moving to a folder
+      if (targetFolderId) {
+        updateData.section_id = null;
+        updateData.subsection_id = null;
+        updateData.group_id = null;
+      }
+      
+      const { error } = await supabase
+        .from('items')
+        .update(updateData)
         .eq('id', itemId);
 
       if (error) throw error;
@@ -138,6 +237,12 @@ export function useItems(sectionId?: string) {
     }
   };
 
+  useEffect(() => {
+    if (hasFolderColumn !== null) {
+      refresh();
+    }
+  }, [sectionId, folderId, hasFolderColumn]);
+
   return {
     items,
     loading,
@@ -145,6 +250,8 @@ export function useItems(sectionId?: string) {
     addItem,
     updateItem,
     deleteItem,
-    reorderItems
+    moveToFolder,
+    reorderItems,
+    hasFolderColumn
   };
 }

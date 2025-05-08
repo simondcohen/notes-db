@@ -1,0 +1,4 @@
+ALTER TABLE folders
+ADD COLUMN IF NOT EXISTS position integer DEFAULT 0,
+ADD COLUMN IF NOT EXISTS notebook_id uuid REFERENCES notebooks(id) ON DELETE CASCADE,
+ADD COLUMN IF NOT EXISTS parent_folder_id uuid REFERENCES folders(id) ON DELETE CASCADE; 

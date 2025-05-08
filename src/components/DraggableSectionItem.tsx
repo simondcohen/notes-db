@@ -12,6 +12,7 @@ interface DraggableSectionItemProps {
   onDelete: (sectionId: string) => void;
   onUpdateTitle: (sectionId: string, newTitle: string) => void;
   onExport?: (sectionId: string) => void;
+  onContextMenu?: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
 export function DraggableSectionItem({
@@ -21,6 +22,7 @@ export function DraggableSectionItem({
   onDelete,
   onUpdateTitle,
   onExport,
+  onContextMenu,
 }: DraggableSectionItemProps) {
   const {
     attributes,
@@ -41,14 +43,15 @@ export function DraggableSectionItem({
       ref={setNodeRef}
       style={style}
       className={`
-        group cursor-pointer
+        group cursor-pointer rounded-md
         ${isDragging ? 'opacity-50' : ''}
       `}
+      onContextMenu={onContextMenu}
     >
       <div
         className={`
-          p-3 flex items-center justify-between
-          ${isSelected ? 'bg-white' : 'hover:bg-gray-100'}
+          p-2 flex items-center justify-between rounded-md
+          ${isSelected ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}
         `}
         onClick={() => onSelect(section.id)}
       >
@@ -63,7 +66,7 @@ export function DraggableSectionItem({
           <EditableText
             value={section.title}
             onSave={(newTitle) => onUpdateTitle(section.id, newTitle)}
-            className="text-gray-700"
+            className={`text-sm ${isSelected ? 'text-blue-700 font-medium' : 'text-gray-700'}`}
           />
         </div>
         <div className="flex space-x-1">
@@ -76,7 +79,7 @@ export function DraggableSectionItem({
               className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-lg"
               title="Export section as ZIP"
             >
-              <Archive className="h-4 w-4 text-gray-500" />
+              <Archive className="h-3.5 w-3.5 text-gray-500" />
             </button>
           )}
           <button
@@ -86,7 +89,7 @@ export function DraggableSectionItem({
             }}
             className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-lg"
           >
-            <Trash2 className="h-4 w-4 text-gray-500" />
+            <Trash2 className="h-3.5 w-3.5 text-gray-500" />
           </button>
         </div>
       </div>

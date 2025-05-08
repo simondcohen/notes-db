@@ -17,6 +17,15 @@ export interface Item {
   id: string;
   title: string;
   notes: Note[];
+  folderId?: string;
+}
+
+export interface Folder {
+  id: string;
+  title: string;
+  items?: Item[];
+  sections?: Section[];
+  parentFolderId?: string;
 }
 
 export interface Group {
@@ -29,21 +38,24 @@ export interface Subsection {
   id: string;
   title: string;
   groups: Group[];
-  items: Item[]; // Ungrouped items
+  items: Item[];
+  folderId?: string;
 }
 
 export interface Section {
   id: string;
   title: string;
+  items: Item[];
   subsections: Subsection[];
-  items: Item[]; // Items directly in section
-  groups: Group[]; // Groups directly in section
+  groups: Group[];
+  folderId?: string;
 }
 
 export interface Notebook {
   id: string;
   title: string;
   sections: Section[];
+  folders: Folder[];
   lastModified: Date;
 }
 
@@ -54,6 +66,7 @@ export interface AppState {
   selectedSubsection?: string;
   selectedItem?: string;
   selectedNote?: string;
+  selectedFolder?: string;
   lastSaved?: Date;
   user?: User;
 }

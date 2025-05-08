@@ -11,6 +11,7 @@ interface DraggableItemProps {
   onSelect: (itemId: string) => void;
   onDelete: (itemId: string) => void;
   onUpdateTitle: (itemId: string, newTitle: string) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 export function DraggableItem({
@@ -19,6 +20,7 @@ export function DraggableItem({
   onSelect,
   onDelete,
   onUpdateTitle,
+  onContextMenu,
 }: DraggableItemProps) {
   const {
     attributes,
@@ -45,6 +47,7 @@ export function DraggableItem({
         ${isSelected ? 'bg-blue-50 text-blue-700 border-blue-100' : 'hover:bg-gray-50'}
       `}
       onClick={() => onSelect(item.id)}
+      onContextMenu={onContextMenu}
     >
       <div className="flex items-center space-x-2">
         <button

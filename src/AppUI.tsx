@@ -14,8 +14,9 @@ import { useSections } from './hooks/useSections';
 import { useItems } from './hooks/useItems';
 import { useNotes } from './hooks/useNotes';
 import { supabase } from './lib/supabase';
-import { Section, Note } from './types';
+import { Section, Note, Folder } from './types';
 import { SearchResult } from './components/SearchResults';
+import { useFolders } from './hooks/useFolders';
 
 interface AppUIProps {
   session: Session;
@@ -32,6 +33,7 @@ interface PersistedState {
   selectedSection?: string;
   selectedItem?: string;
   selectedNote?: string;
+  selectedFolder?: string;
 }
 
 const loadPersistedState = (userId: string): PersistedState => {
@@ -54,6 +56,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
   const [selectedSection, setSelectedSection] = useState<string>();
   const [selectedItem, setSelectedItem] = useState<string>();
   const [selectedNote, setSelectedNote] = useState<string>();
+  const [selectedFolder, setSelectedFolder] = useState<string>();
   const navigate = useNavigate();
   const { notebookId: urlNotebookId } = useParams();
   
@@ -74,7 +77,9 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     updateSection,
     deleteSection,
     reorderSections,
-  } = useSections(selectedNotebook);
+    moveToFolder,
+    refresh: refreshSections,
+  } = useSections(selectedNotebook, selectedFolder);
 
   const {
     items,
@@ -83,7 +88,8 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     updateItem: updateItemTitle,
     deleteItem,
     reorderItems,
-  } = useItems(selectedSection);
+    moveToFolder: moveItemToFolder,
+  } = useItems(selectedSection, selectedFolder);
 
   const {
     notes,
@@ -95,6 +101,16 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     removeTagFromNote,
     refresh: refreshNotes,
   } = useNotes(selectedItem);
+
+  const {
+    folders,
+    loading: foldersLoading,
+    addFolder,
+    updateFolder,
+    deleteFolder,
+    reorderFolders,
+    tableMigrated: foldersMigrated
+  } = useFolders(selectedNotebook);
 
   // Add a new state for sections with notes
   const [sectionsWithNotes, setSectionsWithNotes] = useState<Section[]>([]);
@@ -185,11 +201,13 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
         setSelectedSection(persisted.selectedSection);
         setSelectedItem(persisted.selectedItem);
         setSelectedNote(persisted.selectedNote);
+        setSelectedFolder(persisted.selectedFolder);
       } else {
         // New notebook → start clean
         setSelectedSection(undefined);
         setSelectedItem(undefined);
         setSelectedNote(undefined);
+        setSelectedFolder(undefined);
       }
     } else if (initialNote) {
       setSelectedNotebook(initialNote.notebookId);
@@ -202,6 +220,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
       setSelectedSection(persistedState.selectedSection);
       setSelectedItem(persistedState.selectedItem);
       setSelectedNote(persistedState.selectedNote);
+      setSelectedFolder(persistedState.selectedFolder);
     }
   }, [session.user.id, initialNote, urlNotebookId]);
 
@@ -211,6 +230,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
       selectedSection,
       selectedItem,
       selectedNote,
+      selectedFolder,
     });
   }, [
     session.user.id,
@@ -218,6 +238,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     selectedSection,
     selectedItem,
     selectedNote,
+    selectedFolder,
   ]);
 
   const activeNotebook = notebooks?.find(
@@ -245,6 +266,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     setSelectedSection(undefined);
     setSelectedItem(undefined);
     setSelectedNote(undefined);
+    setSelectedFolder(undefined);
     setIsSidebarOpen(false);
     navigate(`/nb/${notebookId}`);
   };
@@ -258,16 +280,65 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     setSelectedNotebook(notebooks[0]?.id);
   };
 
-  const handleAddSection = async () => {
-    if (selectedNotebook) {
-      await addSection(session.user.id);
+  const handleAddFolder = async () => {
+    if (!session?.user?.id || !selectedNotebook) return;
+    
+    // Deselect any currently selected folder to prevent confusion
+    // This ensures the new folder is created at the root level and UI reflects that
+    if (selectedFolder) {
+      console.log("Deselecting folder before creating new root folder");
+      setSelectedFolder(undefined);
+      // Reset other selections
+      setSelectedSection(undefined);
+      setSelectedItem(undefined);
+      setSelectedNote(undefined);
+    }
+    
+    await addFolder('New Folder', session.user.id);
+  };
+
+  const handleAddSubfolder = async (parentFolderId: string) => {
+    if (!session?.user?.id || !selectedNotebook) return;
+    
+    // Create a subfolder under the parent folder
+    await addFolder('New Subfolder', session.user.id, parentFolderId);
+  };
+
+  const handleAddSection = async (folderId?: string) => {
+    if (!session?.user?.id || !selectedNotebook) return;
+    
+    console.log("Creating section with folderId:", folderId);
+    
+    try {
+      // If a specific folder ID is passed, use it; otherwise, use the currently selected folder
+      const targetFolderId = folderId || selectedFolder;
+      console.log("Target folder ID:", targetFolderId);
+      
+      // Pass the folderId to addSection
+      const success = await addSection(session.user.id, 'New Section', targetFolderId);
+      
+      if (success) {
+        console.log("Section created successfully");
+        // Make sure the UI updates to show the new section
+        await refreshSections();
+        
+        // If this was added to a subfolder, make sure we're viewing that folder
+        if (targetFolderId && targetFolderId !== selectedFolder) {
+          setSelectedFolder(targetFolderId);
+        }
+      } else {
+        console.error("Failed to create section");
+      }
+    } catch (error) {
+      console.error("Error adding section:", error);
+      alert("Failed to add section. Please try again.");
     }
   };
 
   const handleAddItem = async () => {
-    if (!selectedSection) return;
+    if (!selectedSection || !session?.user?.id) return;
     
-    const newItem = await addItem('New Item');
+    const newItem = await addItem(session.user.id, 'New Item');
     if (newItem?.id && newItem?.notes?.[0]?.id) {
       setSelectedItem(newItem.id);
       setSelectedNote(newItem.notes[0].id);
@@ -354,6 +425,86 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     }
   }, [selectedItem, notes]);
 
+  const handleUpdateFolderTitle = async (folderId: string, title: string) => {
+    await updateFolder(folderId, title);
+  };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    await deleteFolder(folderId);
+    if (selectedFolder === folderId) {
+      setSelectedFolder(undefined);
+      setSelectedSection(undefined);
+      setSelectedItem(undefined);
+      setSelectedNote(undefined);
+    }
+  };
+
+  const handleSelectFolder = (folderId: string) => {
+    console.log("AppUI: handleSelectFolder called with:", folderId);
+    
+    // If empty string is passed, it means we're deselecting the folder
+    if (folderId === '') {
+      console.log("AppUI: Deselecting folder");
+      setSelectedFolder(undefined);
+    } else {
+      console.log("AppUI: Selecting folder:", folderId);
+      setSelectedFolder(folderId);
+      
+      // Trigger an immediate refresh of sections with the new folder ID
+      setTimeout(() => {
+        console.log("Forcing sections refresh for newly selected folder:", folderId);
+        refreshSections();
+      }, 100);
+    }
+    
+    // Reset other selections
+    setSelectedSection(undefined);
+    setSelectedItem(undefined);
+    setSelectedNote(undefined);
+  };
+
+  const handleMoveToFolder = async (sectionId: string, folderId: string | null) => {
+    if (!sectionId) return;
+    
+    // Use the moveToFolder function from the useSections hook
+    await moveToFolder(sectionId, folderId);
+  };
+
+  // Add function to move items to folders
+  const handleMoveItemToFolder = async (itemId: string, folderId: string | null) => {
+    if (!itemId) return;
+    
+    // Use the moveToFolder function from the useItems hook for items
+    await moveItemToFolder(itemId, folderId);
+  };
+
+  // Fix handleSectionSelect definition
+  const handleSectionSelect = (sectionId: string) => {
+    setSelectedSection(sectionId);
+    setSelectedItem(undefined);
+    setSelectedNote(undefined);
+  };
+
+  // Fix handleDeleteSection definition
+  const handleDeleteSection = async (sectionId: string) => {
+    await deleteSection(sectionId);
+  };
+
+  // Fix handleUpdateSectionTitle definition
+  const handleUpdateSectionTitle = async (sectionId: string, title: string) => {
+    await updateSection(sectionId, title);
+  };
+
+  // Fix handleReorderSections definition
+  const handleReorderSections = async (reorderedSections: Section[]) => {
+    await reorderSections(reorderedSections);
+  };
+
+  // Add handleReorderFolders function
+  const handleReorderFolders = async (reorderedFolders: Folder[]) => {
+    await reorderFolders(reorderedFolders);
+  };
+
   if (notebooksLoading) return <LoadingSpinner />;
   if (notebooksError) return <div className="text-red-500">Error: {notebooksError}</div>;
 
@@ -394,21 +545,28 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
         <div className="flex-1 flex divide-x divide-gray-200">
           <SectionsColumn
             sections={sections}
+            folders={folders}
             selectedSection={selectedSection}
-            onSelectSection={(sectionId) => {
-              setSelectedSection(sectionId);
-              setSelectedItem(undefined);
-              setSelectedNote(undefined);
-            }}
+            selectedFolder={selectedFolder}
+            onSelectSection={handleSectionSelect}
+            onSelectFolder={handleSelectFolder}
             onAddSection={handleAddSection}
-            onDeleteSection={deleteSection}
-            onUpdateSectionTitle={updateSection}
-            onReorderSections={reorderSections}
-            userId={session.user.id}
+            onAddFolder={handleAddFolder}
+            onAddSubfolder={handleAddSubfolder}
+            onDeleteSection={handleDeleteSection}
+            onDeleteFolder={handleDeleteFolder}
+            onUpdateSectionTitle={handleUpdateSectionTitle}
+            onUpdateFolderTitle={handleUpdateFolderTitle}
+            onReorderSections={handleReorderSections}
+            onReorderFolders={handleReorderFolders}
+            onMoveToFolder={handleMoveToFolder}
+            userId={session?.user?.id}
+            hasFolderSupport={foldersMigrated === true}
           />
           
           <ItemsColumn
             items={items}
+            folders={folders}
             selectedItem={selectedItem}
             onSelectItem={(itemId) => {
               setSelectedItem(itemId);
@@ -421,6 +579,8 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
             onDeleteItem={deleteItem}
             onUpdateItemTitle={updateItemTitle}
             onReorderItems={reorderItems}
+            onMoveItemToFolder={handleMoveItemToFolder}
+            hasFolderSupport={foldersMigrated === true}
           />
           
           <EditorColumn
