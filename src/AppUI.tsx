@@ -58,6 +58,7 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
   const [selectedItem, setSelectedItem] = useState<string>();
   const [selectedNote, setSelectedNote] = useState<string>();
   const [selectedFolder, setSelectedFolder] = useState<string>();
+  const [isLoadingNote, setIsLoadingNote] = useState(false);
   const navigate = useNavigate();
   const { notebookId: urlNotebookId } = useParams();
   
@@ -346,13 +347,14 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
       
       if (success) {
         console.log("Section created successfully");
-        // Make sure the UI updates to show the new section
-        await refreshSections();
         
         // If this was added to a subfolder, make sure we're viewing that folder
         if (targetFolderId && targetFolderId !== selectedFolder) {
           setSelectedFolder(targetFolderId);
         }
+        
+        // Make sure the UI updates to show the new section
+        await refreshSections();
       } else {
         console.error("Failed to create section");
       }
@@ -441,18 +443,21 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
 
   // Automatically open the most recently edited note when a new item is selected
   React.useEffect(() => {
-    if (!selectedItem || notes.length === 0) return;
-
-    // Assumes each note has an `updated_at` (or falls back to `created_at`)
-    const lastEdited = [...notes].sort((a, b) => {
-      const aTime = parseISO((a as any).updated_at ?? (a as any).created_at).getTime();
-      const bTime = parseISO((b as any).updated_at ?? (b as any).created_at).getTime();
-      return bTime - aTime;   // newest first
-    })[0];
-
-    if (lastEdited && lastEdited.id !== selectedNote) {
-      setSelectedNote(lastEdited.id);
+    if (
+      !selectedItem ||
+      notes.length === 0 ||
+      (selectedNote && notes.find(n => n.id === selectedNote)?.item_id === selectedItem)
+    ) {
+      // Either nothing to do, or the user already picked a note.
+      return;
     }
+
+    // Otherwise (first load or after we blanked selectedNote) choose the
+    // most recently edited note in this item:
+    const newest = notes.reduce((a, b) =>
+      new Date(b.updated_at) > new Date(a.updated_at) ? b : a
+    );
+    setSelectedNote(newest.id);
   }, [selectedItem, notes]);
 
   const handleUpdateFolderTitle = async (folderId: string, title: string) => {
@@ -514,8 +519,17 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
   // Centralized handler for selecting an item, whether from ItemsColumn or FolderItem
   const handleSelectItem = (itemId: string) => {
     setSelectedItem(itemId);
-    // Notes are handled by useNotes(selectedItem)
+    setSelectedNote(undefined); // Clear the note immediately
+    setIsLoadingNote(true); // Set loading state
+    savePersistedState(session.user.id, { selectedItem: itemId, selectedNote: undefined });
   };
+
+  // Add effect to reset loading state when note is loaded
+  useEffect(() => {
+    if (selectedNote) {
+      setIsLoadingNote(false);
+    }
+  }, [selectedNote]);
 
   // Updated to use the new central handler
   const handleSectionSelect = (sectionId: string) => {
@@ -552,6 +566,16 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
     <div className="h-screen flex flex-col">
       <TopBar
         onOpenSidebar={() => setIsSidebarOpen(true)}
+        onSearchResultSelect={handleSearchResultSelect}
+        sections={sectionsWithNotes}
+        notebooks={notebooks}
+        selectedNotebook={selectedNotebook}
+        onSelectNotebook={handleNotebookSelect}
+        onCreateNotebook={handleCreateNotebook}
+        onRenameNotebook={updateNotebook}
+        onDeleteNotebook={handleDeleteNotebook}
+        userId={session.user.id}
+        onImportComplete={refreshNotebooks}
         lastSaved={activeNotebook?.lastModified}
         onSave={async () => {
           if (selectedNotebook) {
@@ -559,93 +583,78 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
           }
         }}
         currentNotebook={activeNotebook ? { id: activeNotebook.id, title: activeNotebook.title } : undefined}
-        onRenameNotebook={updateNotebook}
-        onDeleteNotebook={handleDeleteNotebook}
-        userId={session.user.id}
-        onImportComplete={refreshNotebooks}
-        notebooks={notebooks}
-        onSelectNotebook={handleNotebookSelect}
-        onCreateNotebook={handleCreateNotebook}
-        sections={sectionsWithNotes}
-        onSearchResultSelect={handleSearchResultSelect}
       />
-      
       <div className="flex-1 flex">
         <NotebookSidebar
-          notebooks={notebooks}
-          selectedNotebook={selectedNotebook}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
+          notebooks={notebooks}
+          selectedNotebook={selectedNotebook}
           onSelectNotebook={handleNotebookSelect}
           onCreateNotebook={handleCreateNotebook}
           onRenameNotebook={updateNotebook}
           onDeleteNotebook={handleDeleteNotebook}
         />
-        
-        <div className="flex-1 flex divide-x divide-gray-200">
-          <SectionsColumn
-            sections={sections}
-            folders={folders}
-            selectedSection={selectedSection}
-            selectedFolder={selectedFolder}
-            onSelectSection={handleSectionSelect}
-            onSelectFolder={handleSelectFolder}
-            onSelectItem={handleSelectItem}
-            onAddSection={handleAddSection}
-            onAddFolder={handleAddFolder}
-            onAddSubfolder={handleAddSubfolder}
-            onDeleteSection={handleDeleteSection}
-            onDeleteFolder={handleDeleteFolder}
-            onUpdateSectionTitle={handleUpdateSectionTitle}
-            onUpdateFolderTitle={handleUpdateFolderTitle}
-            onReorderSections={handleReorderSections}
-            onReorderFolders={handleReorderFolders}
-            onMoveToFolder={handleMoveToFolder}
-            userId={session?.user?.id}
-            hasFolderSupport={foldersMigrated === true}
-          />
-          
-          <ItemsColumn
-            items={items}
-            folders={folders}
-            selectedItem={selectedItem}
-            onSelectItem={handleSelectItem}
-            onAddItem={handleAddItem}
-            onDeleteItem={deleteItem}
-            onUpdateItemTitle={updateItemTitle}
-            onReorderItems={reorderItems}
-            onMoveItemToFolder={handleMoveItemToFolder}
-            hasFolderSupport={foldersMigrated === true}
-          />
-          
-          <EditorColumn
-            notes={notes}
-            selectedNote={selectedNote}
-            onSelectNote={setSelectedNote}
-            onAddNote={async () => {
-              if (selectedItem) {
-                const newNote = await addNote('New Note');
-                if (newNote) {
-                  setSelectedNote(newNote.id);
+        <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex overflow-hidden">
+            <SectionsColumn
+              sections={sections}
+              selectedSection={selectedSection}
+              onSelectSection={handleSectionSelect}
+              onAddSection={handleAddSection}
+              onDeleteSection={handleDeleteSection}
+              onUpdateSectionTitle={handleUpdateSectionTitle}
+              onReorderSections={handleReorderSections}
+              onMoveToFolder={handleMoveToFolder}
+              selectedFolder={selectedFolder}
+              folders={folders}
+              onSelectFolder={handleSelectFolder}
+              onAddFolder={handleAddFolder}
+              onAddSubfolder={handleAddSubfolder}
+              onDeleteFolder={handleDeleteFolder}
+              onUpdateFolderTitle={handleUpdateFolderTitle}
+              onReorderFolders={handleReorderFolders}
+              userId={session.user.id}
+              hasFolderSupport={foldersMigrated === true}
+            />
+            <ItemsColumn
+              items={items}
+              selectedItem={selectedItem}
+              onSelectItem={handleSelectItem}
+              onAddItem={handleAddItem}
+              onDeleteItem={deleteItem}
+              onUpdateItemTitle={updateItemTitle}
+              onReorderItems={reorderItems}
+              onMoveItemToFolder={handleMoveItemToFolder}
+              hasFolderSupport={foldersMigrated === true}
+            />
+            <EditorColumn
+              notes={notes}
+              selectedNote={selectedNote}
+              onSelectNote={setSelectedNote}
+              onAddNote={async () => {
+                if (selectedItem) {
+                  const newNote = await addNote('New Note');
+                  if (newNote) {
+                    setSelectedNote(newNote.id);
+                  }
                 }
-              }
-            }}
-            onDeleteNote={async (noteId: string) => {
-              await deleteNote(noteId);
-              return;
-            }}
-            onUpdateContent={handleUpdateContent}
-            onUpdateNoteTitle={handleUpdateNoteTitle}
-            addTagToNote={async (noteId: string, tagId: string) => {
-              await addTagToNote(noteId, tagId);
-              return;
-            }}
-            removeTagFromNote={async (noteId: string, tagId: string) => {
-              await removeTagFromNote(noteId, tagId);
-              return;
-            }}
-            userId={session.user.id}
-          />
+              }}
+              onDeleteNote={async (noteId: string) => {
+                await deleteNote(noteId);
+              }}
+              onUpdateContent={handleUpdateContent}
+              onUpdateNoteTitle={handleUpdateNoteTitle}
+              addTagToNote={async (noteId: string, tagId: string) => {
+                await addTagToNote(noteId, tagId);
+              }}
+              removeTagFromNote={async (noteId: string, tagId: string) => {
+                await removeTagFromNote(noteId, tagId);
+              }}
+              userId={session.user.id}
+              isLoadingNote={isLoadingNote}
+            />
+          </div>
         </div>
       </div>
     </div>
