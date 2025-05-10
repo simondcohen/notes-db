@@ -11,6 +11,9 @@ export interface Note {
   content: string;
   tags: Tag[];
   lastModified: Date;
+  item_id: string;
+  updated_at: string;
+  created_at: string;
 }
 
 export interface Item {

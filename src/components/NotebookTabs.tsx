@@ -145,7 +145,7 @@ export function NotebookTabs({
                 </div>
               ) : (
                 <div className="flex items-center">
-                  <button
+                  <div
                     className={`
                       px-4 py-1.5 rounded-full font-medium transition-colors flex items-center
                       ${selectedNotebook === notebook.id 
@@ -153,9 +153,13 @@ export function NotebookTabs({
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }
                     `}
-                    onClick={() => onSelectNotebook(notebook.id)}
                   >
-                    {notebook.title}
+                    <button
+                      className="flex-1 text-left"
+                      onClick={() => onSelectNotebook(notebook.id)}
+                    >
+                      {notebook.title}
+                    </button>
                     <button 
                       className={`
                         ml-2 p-0.5 rounded-full 
@@ -171,7 +175,7 @@ export function NotebookTabs({
                     >
                       <Pencil className="h-3 w-3" />
                     </button>
-                  </button>
+                  </div>
                 </div>
               )}
 

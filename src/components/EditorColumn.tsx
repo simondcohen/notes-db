@@ -7,6 +7,7 @@ import { RichTextEditor } from './RichTextEditor';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from './ui/command';
 import { useTags } from '../hooks/useTags';
 import { DeleteNoteDialog } from './DeleteNoteDialog';
+import { LoadingSpinner } from './LoadingSpinner';
 import debounce from 'lodash.debounce';
 
 interface EditorColumnProps {
@@ -20,6 +21,7 @@ interface EditorColumnProps {
   addTagToNote: (noteId: string, tagId: string) => Promise<void>;
   removeTagFromNote: (noteId: string, tagId: string) => Promise<void>;
   userId: string;
+  isLoadingNote: boolean;
 }
 
 export function EditorColumn({
@@ -33,6 +35,7 @@ export function EditorColumn({
   addTagToNote,
   removeTagFromNote,
   userId,
+  isLoadingNote,
 }: EditorColumnProps) {
   const activeNote = notes?.find((note) => note.id === selectedNote);
   const isDisabled = !notes;
@@ -58,7 +61,8 @@ export function EditorColumn({
 
   useEffect(() => {
     // cancel any queued save when we switch to a different note
-    debouncedSave.cancel();
+    debouncedSave.flush();   // force-save any pending edits before canceling
+    debouncedSave.cancel();  // then clear the timer
   }, [activeNote?.id]);
 
   useEffect(() => setDraftContent(activeNote?.content || ''), [activeNote?.id]);
@@ -147,7 +151,14 @@ export function EditorColumn({
       </div>
       
       <div className="flex-1 overflow-hidden flex flex-col">
-        {activeNote ? (
+        {isLoadingNote ? (
+          <div className="h-full flex items-center justify-center">
+            <div className="flex flex-col items-center gap-2">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+              <div className="text-gray-500">Loading note...</div>
+            </div>
+          </div>
+        ) : activeNote ? (
           <>
             <div className="p-4 border-b border-gray-200">
               <div className="flex flex-wrap gap-2 mb-2">
