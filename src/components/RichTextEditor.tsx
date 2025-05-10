@@ -2,7 +2,57 @@ import React from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
-import { Bold, Italic, List, ListOrdered, Quote, Heading1, Heading2, Code, Highlighter } from 'lucide-react';
+import { Bold, Italic, List, ListOrdered, Quote, Heading1, Heading2, Code, Highlighter, FileCode } from 'lucide-react';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import { common, createLowlight } from 'lowlight';
+import json from 'highlight.js/lib/languages/json';
+import 'highlight.js/styles/github-dark.css';
+import { Extension } from '@tiptap/core';
+import { Plugin, PluginKey } from 'prosemirror-state';
+
+const lowlight = createLowlight(common);
+lowlight.register({ json });
+
+// Extension to handle JSON paste
+const JsonPasteHandler = Extension.create({
+  name: 'jsonPasteHandler',
+  
+  addProseMirrorPlugins() {
+    const plugin = new Plugin({
+      key: new PluginKey('jsonPasteHandler'),
+      props: {
+        handlePaste: (view, event) => {
+          const plainText = event.clipboardData?.getData('text/plain');
+          
+          if (!plainText) return false;
+          
+          // Try to parse as JSON to check if valid
+          try {
+            // Will throw if not valid JSON
+            const jsonObj = JSON.parse(plainText);
+            
+            // Format JSON with proper indentation
+            const formattedJson = JSON.stringify(jsonObj, null, 2);
+            
+            // If we got here, it's valid JSON - insert a code block
+            this.editor.commands.insertContent({
+              type: 'codeBlock',
+              attrs: { language: 'json' },
+              content: [{ type: 'text', text: formattedJson }]
+            });
+            
+            return true; // Event handled
+          } catch (e) {
+            // Not JSON, let the editor handle it normally
+            return false;
+          }
+        }
+      }
+    });
+    
+    return [plugin];
+  }
+});
 
 interface RichTextEditorProps {
   content: string;
@@ -12,10 +62,15 @@ interface RichTextEditorProps {
 export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ codeBlock: false }),
       Highlight.configure({
         multicolor: false,
       }),
+      CodeBlockLowlight.configure({
+        lowlight,
+        defaultLanguage: 'json',
+      }),
+      JsonPasteHandler,
     ],
     content,
     editable: true,
@@ -104,6 +159,12 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
             isActive={editor.isActive('code')}
             icon={Code}
             title="Code"
+          />
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            isActive={editor.isActive('codeBlock')}
+            icon={FileCode}
+            title="Code Block"
           />
           <ToolbarButton
             onClick={() => editor.chain().focus().toggleHighlight().run()}
