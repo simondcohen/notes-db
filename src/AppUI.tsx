@@ -291,7 +291,15 @@ export default function AppUI({ session, initialNote }: AppUIProps) {
   };
 
   const handleCreateNotebook = async () => {
-    await addNotebook('New Notebook');
+    try {
+      const newNotebookId = await addNotebook('New Notebook');
+      if (newNotebookId) {
+        // Navigate to the new notebook
+        navigate(`/nb/${newNotebookId}`);
+      }
+    } catch (error) {
+      console.error('Error creating notebook:', error);
+    }
   };
 
   const handleDeleteNotebook = async (notebookId: string) => {

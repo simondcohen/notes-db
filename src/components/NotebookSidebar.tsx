@@ -35,6 +35,11 @@ export function NotebookSidebar({
     setDeleteDialogOpen(true);
   };
   
+  const handleCreateNotebook = async () => {
+    onCreateNotebook();
+    onClose();
+  };
+  
   const confirmDelete = () => {
     if (notebookToDelete) {
       onDeleteNotebook(notebookToDelete.id);
@@ -106,7 +111,7 @@ export function NotebookSidebar({
             <div className="text-center text-gray-500 mt-8">
               <p>No notebooks yet</p>
               <button
-                onClick={onCreateNotebook}
+                onClick={handleCreateNotebook}
                 className="mt-2 text-blue-500 hover:text-blue-600"
               >
                 Create your first notebook
@@ -117,7 +122,7 @@ export function NotebookSidebar({
         
         <div className="p-4 border-t border-gray-200">
           <button
-            onClick={onCreateNotebook}
+            onClick={handleCreateNotebook}
             className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg flex items-center justify-center space-x-2 hover:bg-blue-600 transition-colors"
           >
             <Plus className="h-5 w-5" />

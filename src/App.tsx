@@ -40,12 +40,10 @@ function NotebookRouter({ session }: { session: Session }) {
 
   const handleCreateNotebook = async () => {
     try {
-      const success = await addNotebook('New Notebook');
-      if (success && notebooks && notebooks.length > 0) {
-        // After creating a notebook, refresh and get the latest notebook (which should be the one we just created)
-        await refreshNotebooks();
-        const latestNotebook = notebooks[0]; // Assuming notebooks are ordered by last_modified desc
-        return latestNotebook?.id || '';
+      const newNotebookId = await addNotebook('New Notebook');
+      if (newNotebookId) {
+        navigate(`/nb/${newNotebookId}`);
+        return newNotebookId;
       }
       return '';
     } catch (error) {

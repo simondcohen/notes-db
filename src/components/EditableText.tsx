@@ -85,7 +85,7 @@ export function EditableText({
         e.stopPropagation();
         setIsEditing(true);
       }}
-      className={`cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 ${className}`}
+      className={`inline-block cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 ${className}`}
     >
       {value}
     </span>

@@ -75,7 +75,7 @@ export function DraggableItem({
       ref={setNodeRef}
       style={style}
       className={`
-        group px-3 py-2 rounded-lg cursor-pointer flex items-center justify-between
+        group px-3 py-2 rounded-lg cursor-pointer flex items-center
         border-b border-gray-100 last:border-b-0 relative
         ${isDragging ? 'opacity-50' : ''}
         ${isSelected ? 'bg-blue-50 text-blue-700 border-blue-100' : 'hover:bg-gray-50'}
@@ -83,9 +83,9 @@ export function DraggableItem({
       onClick={() => onSelect(item.id)}
       onContextMenu={onContextMenu}
     >
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-2 flex-1 min-w-0">
         <button
-          className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing"
+          className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing flex-shrink-0"
           {...attributes}
           {...listeners}
         >
@@ -97,7 +97,7 @@ export function DraggableItem({
           className="truncate"
         />
       </div>
-      <div className="flex items-center space-x-1">
+      <div className="flex items-center space-x-1 ml-2 flex-shrink-0">
         {onMoveToFolder && (
           <button
             onClick={handleMoveToClick}

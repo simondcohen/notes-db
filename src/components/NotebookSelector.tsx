@@ -85,7 +85,7 @@ export function NotebookSelector({
         className="flex items-center space-x-2 px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors"
       >
         <Book className="h-5 w-5 text-gray-600" />
-        <span className="text-gray-700 font-medium">
+        <span className="text-gray-700 font-medium text-lg">
           {selectedNotebookData?.title || 'Select Notebook'}
         </span>
         <ChevronDown className="h-4 w-4 text-gray-500" />

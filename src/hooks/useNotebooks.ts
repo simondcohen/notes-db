@@ -26,6 +26,7 @@ export function useNotebooks(userId: string) {
         id: notebook.id,
         title: notebook.title,
         sections: [],
+        folders: [],
         lastModified: notebook.last_modified ? new Date(notebook.last_modified) : new Date()
       }));
 
@@ -42,19 +43,22 @@ export function useNotebooks(userId: string) {
 
   const addNotebook = async (title: string) => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('notebooks')
         .insert({
           title,
           user_id: userId,
-        });
+        })
+        .select('id');
 
       if (error) throw error;
+      
+      const newNotebookId = data?.[0]?.id;
       await refresh();
-      return true;
+      return newNotebookId;
     } catch (error) {
       handleError(error as Error);
-      return false;
+      return null;
     }
   };
 
