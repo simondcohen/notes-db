@@ -1,10 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Session } from '@supabase/supabase-js';
-import { supabase } from './lib/supabase';
-import { Auth } from './components/Auth';
-import { ResetPassword } from './components/ResetPassword';
-import { LoadingSpinner } from './components/LoadingSpinner';
 import AppUI from './AppUI';
 import { TagNotesView } from './views/TagNotesView';
 import { AllTagsView } from './views/AllTagsView';
@@ -15,8 +10,6 @@ import { Toaster } from "react-hot-toast";
 
 function RouteStateManager() {
   const location = useLocation();
-  const navigate = useNavigate();
-
   useEffect(() => {
     // Save current path to localStorage
     localStorage.setItem('lastPath', location.pathname + location.search);
@@ -26,7 +19,9 @@ function RouteStateManager() {
   return null;
 }
 
-function NotebookRouter({ session }: { session: Session }) {
+const USER_ID = 'local-user';
+
+function NotebookRouter() {
   const location = useLocation();
   const navigate = useNavigate();
   const noteToOpen = location.state?.noteToOpen;
@@ -36,7 +31,7 @@ function NotebookRouter({ session }: { session: Session }) {
     loading: notebooksLoading,
     addNotebook,
     refresh: refreshNotebooks
-  } = useNotebooks(session.user.id);
+  } = useNotebooks(USER_ID);
 
   const handleCreateNotebook = async () => {
     try {
@@ -81,44 +76,11 @@ function NotebookRouter({ session }: { session: Session }) {
   }
 
   // Otherwise render the AppUI with the notebook
-  return <AppUI session={session} initialNote={noteToOpen} />;
+  const mockSession = { user: { id: USER_ID } } as any;
+  return <AppUI session={mockSession} initialNote={noteToOpen} />;
 }
 
 export default function App() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [needsNewPassword, setNeedsNewPassword] = useState(false);
-
-  useEffect(() => {
-    supabase.auth.getSession()
-      .then(({ data: { session }, error }) => {
-        if (error) console.error('getSession error', error);
-        setSession(session);
-      })
-      .finally(() => setLoading(false));
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setNeedsNewPassword(true);
-      }
-      setSession(session);
-    });
-
-    return () => subscription?.unsubscribe();
-  }, []);
-
-  if (loading) {
-    return <LoadingSpinner />;
-  }
-
-  if (needsNewPassword && session) {
-    return <ResetPassword onComplete={() => setNeedsNewPassword(false)} />;
-  }
-
-  if (!session) {
-    return <Auth />;
-  }
-
   return (
     <ToastProvider>
       <BrowserRouter>
@@ -127,8 +89,8 @@ export default function App() {
         <Routes>
           <Route path="/tag/:tagName" element={<TagNotesView />} />
           <Route path="/tags" element={<AllTagsView />} />
-          <Route path="/nb/:notebookId/*" element={<NotebookRouter session={session} />} />
-          <Route path="/*" element={<NotebookRouter session={session} />} />
+          <Route path="/nb/:notebookId/*" element={<NotebookRouter />} />
+          <Route path="/*" element={<NotebookRouter />} />
         </Routes>
       </BrowserRouter>
     </ToastProvider>
