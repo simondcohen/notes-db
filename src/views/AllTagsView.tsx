@@ -2,13 +2,12 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Tag as TagIcon } from 'lucide-react';
 import { useTags } from '../hooks/useTags';
-import { useAuth } from '../hooks/useAuth';
 
 export function AllTagsView() {
-  const { user } = useAuth();
+  const userId = 'local-user';
   const navigate = useNavigate();
   const location = useLocation();
-  const { tags, loading } = useTags(user?.id || '');
+  const { tags, loading } = useTags(userId);
 
   // Sort tags alphabetically by name (case-insensitive)
   const sortedTags = [...tags].sort((a, b) => 
